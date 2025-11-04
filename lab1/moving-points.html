@@ -32,7 +32,7 @@ const  vertexShaderSource =`#version 300 es
 
 
     out vec3 v_color;
-    out float v_pointsize;
+    flat out float v_pointsize;
 
     uniform float u_width;
     uniform float u_height;
@@ -50,7 +50,7 @@ const  fragmentShaderSource =`#version 300 es
     precision highp float;
 
     in vec3 v_color;
-    in float v_pointsize;
+    flat in float v_pointsize;
     
     out vec4 o_color;
     
@@ -101,28 +101,36 @@ const  pointVelocities = new Float32Array( 2*POINT_COUNT );
 const  pointRandomColors = new Float32Array( 3*POINT_COUNT );
 
 
+
+function circleCircleCollision(coordsList, sizeList, id1, id2) {
+    let x1 = coordsList[2*id1]
+    let y1 = coordsList[2*id1+1]
+    let sz1 = sizeList[id1]
+    let rsz1 = sz1/2
+
+    let x2 = coordsList[2*id2]
+    let y2 = coordsList[2*id2+1]
+    let sz2 = sizeList[id2]
+    let rsz2 = sz2/2
+
+    let dx = x1 - x2
+    let dy = y1 - y2  
+
+    let rsum = rsz1 + rsz2
+
+    let dis2 = dx*dx + dy*dy
+    
+    return sqrt(dis2) - rsum
+}
+
 function circleCollides(coordsList, sizeList, id, maxID) {
     
-    let px = coordsList[2*id]
-    let py = coordsList[2*id+1]
-    let psz = sizeList[id]
-    let rpsz = psz/2
 
 
     for (let i = 0; i < maxID; ++i) {
         if (i == id) continue
 
-        let x = coordsList[2*i]
-        let y = coordsList[2*i+1]
-        let sz = sizeList[i]
-        let rsz = sz/2
-
-        let rsum = rpsz + rsz
-
-        let dx = px - x
-        let dy = py - y  
-
-        if (dx*dx + dy*dy <= rsum*rsum) {
+        if (circleCollides(coordsList, sizeList, id, i) > 0) {
             return true
         }
     }
@@ -155,29 +163,49 @@ function setPointData() { // called during initialization to fill the arrays wit
 }
 
 function updatePointCoordsForFrame() { // called during an animation, before each frame.
-    let  size = Number(document.getElementById("sizeChoice").value) / 2; // radius
-    for (let i = 0; i < 2*POINT_COUNT; i += 2) { // x-coords
-        pointCoords[i] += pointVelocities[i];
-        if (pointCoords[i]-size < 0) {
-            pointCoords[i] = size-(pointCoords[i]-size);// move coord back onto canvas
-            pointVelocities[i] = Math.abs(pointVelocities[i]); // and make sure point is moving in positive direction
-        }
-        else if (pointCoords[i]+size > canvas.width) {
-            pointCoords[i] = canvas.width - (pointCoords[i]+size - canvas.width) - size;// move coord back onto canvas
-            pointVelocities[i] = -Math.abs(pointVelocities[i]); // and make sure point is moving in negative direction
-        }
-    }
-    for (let i = 1; i < 2*POINT_COUNT; i += 2) { // y-coords
-        pointCoords[i] += pointVelocities[i];
-        if (pointCoords[i]-size < 0) {
-            pointCoords[i] = size-(pointCoords[i]-size);// move coord back onto canvas
-            pointVelocities[i] = Math.abs(pointVelocities[i]); // and make sure point is moving in positive direction
-        }
-        else if (pointCoords[i]+size > canvas.height) {
-            pointCoords[i] = canvas.height - (pointCoords[i]+size - canvas.height) - size;// move coord back onto canvas
-            pointVelocities[i] = -Math.abs(pointVelocities[i]); // and make sure point is moving in negative direction
+
+    for (let i = 0; i < POINT_COUNT; ++i) {
+        let coordID1 = 2*i;
+        let x1 = pointCoords[coordID];
+        let y1 = pointCoords[coordID+1];
+        let sz1 = pointSizes[i];
+
+        for (let j = i+1; j < POINT_COUNT; ++j) {
+            let coordID2 = 2*j;
+            let x2 = pointCoords[coordID2];
+            let y2 = pointCoords[coordID2+1];
+            let sz2 = pointSizes[j];
+
+
+
+
+
         }
     }
+
+    // let  size = Number(document.getElementById("sizeChoice").value) / 2; // radius
+    // for (let i = 0; i < 2*POINT_COUNT; i += 2) { // x-coords
+    //     pointCoords[i] += pointVelocities[i];
+    //     if (pointCoords[i]-size < 0) {
+    //         pointCoords[i] = size-(pointCoords[i]-size);// move coord back onto canvas
+    //         pointVelocities[i] = Math.abs(pointVelocities[i]); // and make sure point is moving in positive direction
+    //     }
+    //     else if (pointCoords[i]+size > canvas.width) {
+    //         pointCoords[i] = canvas.width - (pointCoords[i]+size - canvas.width) - size;// move coord back onto canvas
+    //         pointVelocities[i] = -Math.abs(pointVelocities[i]); // and make sure point is moving in negative direction
+    //     }
+    // }
+    // for (let i = 1; i < 2*POINT_COUNT; i += 2) { // y-coords
+    //     pointCoords[i] += pointVelocities[i];
+    //     if (pointCoords[i]-size < 0) {
+    //         pointCoords[i] = size-(pointCoords[i]-size);// move coord back onto canvas
+    //         pointVelocities[i] = Math.abs(pointVelocities[i]); // and make sure point is moving in positive direction
+    //     }
+    //     else if (pointCoords[i]+size > canvas.height) {
+    //         pointCoords[i] = canvas.height - (pointCoords[i]+size - canvas.height) - size;// move coord back onto canvas
+    //         pointVelocities[i] = -Math.abs(pointVelocities[i]); // and make sure point is moving in negative direction
+    //     }
+    // }
 }
 
 class Vector4 {
