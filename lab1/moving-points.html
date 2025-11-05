@@ -90,7 +90,9 @@ let  animating = false;  // is the animation running?
    colors are used when the user selects colored rather than red points.
    The positions of the points are updated for each frame of the animation. */
 
-const  POINT_COUNT = 2;
+const  POINT_COUNT = 20;
+
+
 
 const pointSizes = new Float32Array(POINT_COUNT)
 const  pointCoords = new Float32Array( 2*POINT_COUNT );
@@ -114,9 +116,9 @@ const minSize = 16
 const maxSize = 64
 function setPointData() { // called during initialization to fill the arrays with data.
     for (let i = 0; i < POINT_COUNT; i++) {
-        pointSizes[i] = minSize + Math.random()*(maxSize - minSize)
-           // Each point has two coordinates and two velocities.  Velocity number k
-           // tells how fast coordinate number k changes in pixels per frame.
+        // pointSizes[i] = minSize + Math.random()*(maxSize - minSize)
+        pointSizes[i] = 32        
+        
         o: for (;;) {
             // [sz/2, canvas.width - sz/2]
             // [sz/2, canvas.height - sz/2]
@@ -233,11 +235,8 @@ function updatePointCoordsForFrame() { // called during an animation, before eac
                 let halfp = dot(dp,dv)/dot(dv,dv)
                 let q = (dot(dp,dp) - rsum*rsum) / dot(dv,dv);
 
-                console.log("halfp: "+halfp)
-                console.log("q: "+q)
 
                 let radicand = halfp*halfp - q
-                console.log("radicand: "+radicand)
                 if (radicand >= 0) {
                     let t1 = -halfp + Math.sqrt(radicand)
                     let t2 = -halfp - Math.sqrt(radicand)
@@ -254,23 +253,35 @@ function updatePointCoordsForFrame() { // called during an animation, before eac
                     p1 = new Vector2(pointCoords[coordID1], pointCoords[coordID1+1])
                     p2 = new Vector2(pointCoords[coordID2], pointCoords[coordID2+1])
 
-                    dp = sub(p1,p2)
+                    let r1 = sz1/2;
+                    let r2 = sz2/2;
 
-                    let normal = div(dp, Math.sqrt(dot(dp,dp)))
-                    console.log("normal: "+normal.x+" "+normal.y)
-
-                    let scaler1 = -2 * dot(v1, normal)
-                    let rv1 = sub(v1, mul(normal, scaler1))
-
-                    let scaler2 = -2 *dot(v2, normal)
-                    let rv2 = sub(v2, mul(normal, scaler2)) 
+                    let m1 = Math.PI*r1*r1;
+                    let m2 = Math.PI*r2*r2;
 
 
-                    pointVelocities[coordID1] = rv1.x
-                    pointVelocities[coordID1+1] = rv1.y
+                    let new_v1;
+                    let new_v2;
+                    {
+                        let c1 = mul(v1, m1 - m2);
+                        let c2 = mul(v2, 2*m2);
+                        let c3 = add(c1, c2)
+                        let c4 = div(c3, m1+m2)
+                        new_v1 = c4
+                    }
+                    {
+                        let c1 = mul(v2, m2 - m1);
+                        let c2 = mul(v1, 2*m1)
+                        let c3 = add(c1, c2)
+                        let c4 = div(c3, m1+m2)
+                        new_v2 = c4;
+                    }
 
-                    pointVelocities[coordID2] = rv2.x
-                    pointVelocities[coordID2+1] = rv2.y
+                    pointVelocities[coordID1] = new_v1.x
+                    pointVelocities[coordID1+1] = new_v1.y
+
+                    pointVelocities[coordID2] = new_v2.x
+                    pointVelocities[coordID2+1] = new_v2.y
 
                 } 
             }
