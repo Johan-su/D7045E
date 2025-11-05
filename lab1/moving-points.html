@@ -90,14 +90,12 @@ let  animating = false;  // is the animation running?
    colors are used when the user selects colored rather than red points.
    The positions of the points are updated for each frame of the animation. */
 
-const  POINT_COUNT = 20;
+let POINT_COUNT;
 
-
-
-const pointSizes = new Float32Array(POINT_COUNT)
-const  pointCoords = new Float32Array( 2*POINT_COUNT );
-const  pointVelocities = new Float32Array( 2*POINT_COUNT );
-const  pointRandomColors = new Float32Array( 3*POINT_COUNT );
+let pointSizes;
+let pointCoords;
+let pointVelocities;
+let pointRandomColors;
 
 function circleCircleCollision(x1, y1, sz1, x2, y2, sz2) {
     let rsz1 = sz1/2
@@ -112,12 +110,21 @@ function circleCircleCollision(x1, y1, sz1, x2, y2, sz2) {
     return Math.sqrt(dis2) - rsum;
 }
 
+function createPointArrays(pointCount) {
+    POINT_COUNT = pointCount;
+    pointSizes = new Float32Array(POINT_COUNT)
+    pointCoords = new Float32Array( 2*POINT_COUNT );
+    pointVelocities = new Float32Array( 2*POINT_COUNT );
+    pointRandomColors = new Float32Array( 3*POINT_COUNT );
+}
+
+
 const minSize = 16
 const maxSize = 64
-function setPointData() { // called during initialization to fill the arrays with data.
+function setPointData(pointCount) { // called during initialization to fill the arrays with data.
+    createPointArrays(pointCount)
     for (let i = 0; i < POINT_COUNT; i++) {
-        // pointSizes[i] = minSize + Math.random()*(maxSize - minSize)
-        pointSizes[i] = 32        
+        pointSizes[i] = minSize + Math.random()*(maxSize - minSize)
         
         o: for (;;) {
             // [sz/2, canvas.width - sz/2]
@@ -156,6 +163,77 @@ function setPointData() { // called during initialization to fill the arrays wit
     }
 }
 
+function setPointData5a1() { 
+    createPointArrays(2)
+
+    pointSizes[0] = 32
+    pointSizes[1] = 32
+
+    pointCoords[0] = 100;  // x-coordinate of point
+    pointCoords[1] = canvas.height/2;  // y-coordinate of point
+
+    pointCoords[2] = 400;  // x-coordinate of point
+    pointCoords[3] = canvas.height/2;  // y-coordinate of point
+
+    pointVelocities[0] = 1;
+    pointVelocities[1] = 0;
+
+    pointVelocities[2] = -1;
+    pointVelocities[3] = 0;
+
+    for (let i = 0; i < 3 * POINT_COUNT; i++) {
+        pointRandomColors[i] = Math.random();
+    }
+}
+
+function setPointData5a2() { 
+    createPointArrays(2)
+
+    pointSizes[0] = 32
+    pointSizes[1] = 32
+
+    pointCoords[0] = 100;  // x-coordinate of point
+    pointCoords[1] = canvas.height/2;  // y-coordinate of point
+
+    pointCoords[2] = 400;  // x-coordinate of point
+    pointCoords[3] = canvas.height/2;  // y-coordinate of point
+
+    pointVelocities[0] = 0;
+    pointVelocities[1] = 0;
+
+    pointVelocities[2] = -1;
+    pointVelocities[3] = 0;
+
+    for (let i = 0; i < 3 * POINT_COUNT; i++) {
+        pointRandomColors[i] = Math.random();
+    }
+}
+
+function setPointData5a3() { 
+    createPointArrays(2)
+
+    pointSizes[0] = 32
+    pointSizes[1] = 32
+
+    pointCoords[0] = 100;  // x-coordinate of point
+    pointCoords[1] = canvas.height/2;  // y-coordinate of point
+
+    pointCoords[2] = 400;  // x-coordinate of point
+    pointCoords[3] = canvas.height/2 + 18;  // y-coordinate of point
+
+    pointVelocities[0] = 1;
+    pointVelocities[1] = 0;
+
+    pointVelocities[2] = -1;
+    pointVelocities[3] = 0;
+
+    for (let i = 0; i < 3 * POINT_COUNT; i++) {
+        pointRandomColors[i] = Math.random();
+    }
+}
+
+
+
 class Vector2 {
     constructor(x, y) {
         this.x = x
@@ -184,7 +262,7 @@ function div(v, s) {
 }
 // https://www.desmos.com/calculator/3q1paue8hv
 function updatePointCoordsForFrame() { // called during an animation, before each frame.
-
+    
 
     for (let i = 0; i < POINT_COUNT; i += 1) {
         let size = pointSizes[i]/2;
@@ -253,28 +331,42 @@ function updatePointCoordsForFrame() { // called during an animation, before eac
                     p1 = new Vector2(pointCoords[coordID1], pointCoords[coordID1+1])
                     p2 = new Vector2(pointCoords[coordID2], pointCoords[coordID2+1])
 
+
+                    let normal = sub(p2, p1)
+                    let unitnormal = div(normal, Math.sqrt(dot(normal,normal)))
+
+                    let unittangent = new Vector2(-unitnormal.y, unitnormal.x)
+
+
+                    let v1n = dot(unitnormal, v1)
+                    let v1t = dot(unittangent, v1)
+
+                    let v2n = dot(unitnormal, v2)
+                    let v2t = dot(unittangent, v2)
+
+
                     let r1 = sz1/2;
                     let r2 = sz2/2;
 
                     let m1 = Math.PI*r1*r1;
                     let m2 = Math.PI*r2*r2;
 
+                    let new_v1n = (v1n*(m1 - m2) + 2*m2*v2n)/(m1 + m2);
+                    let new_v2n = (v2n*(m2 - m1) + 2*m1*v1n)/(m1 + m2);
 
                     let new_v1;
+                    {
+                        let c1 = mul(unitnormal, new_v1n)
+                        let c2 = mul(unittangent, v1t)
+                        let c3 = add(c1, c2)
+                        new_v1 = c3
+                    }
                     let new_v2;
                     {
-                        let c1 = mul(v1, m1 - m2);
-                        let c2 = mul(v2, 2*m2);
+                        let c1 = mul(unitnormal, new_v2n)
+                        let c2 = mul(unittangent, v2t)
                         let c3 = add(c1, c2)
-                        let c4 = div(c3, m1+m2)
-                        new_v1 = c4
-                    }
-                    {
-                        let c1 = mul(v2, m2 - m1);
-                        let c2 = mul(v1, 2*m1)
-                        let c3 = add(c1, c2)
-                        let c4 = div(c3, m1+m2)
-                        new_v2 = c4;
+                        new_v2 = c3
                     }
 
                     pointVelocities[coordID1] = new_v1.x
@@ -282,7 +374,6 @@ function updatePointCoordsForFrame() { // called during an animation, before eac
 
                     pointVelocities[coordID2] = new_v2.x
                     pointVelocities[coordID2+1] = new_v2.y
-
                 } 
             }
         }
@@ -311,7 +402,7 @@ const red = new Vector4(1, 0, 0, 1)
 function draw() {
 
     let background_color = gray
-    let monochrome_color = gold
+    let monochrome_color = red
 
 
     gl.clearColor(background_color.x, background_color.y, background_color.z, 1);  // specify the color to be used for clearing
@@ -391,7 +482,11 @@ function initGL() {
     bufferColor = gl.createBuffer();
     bufferSizes = gl.createBuffer()
 
-    setPointData();
+    setPointData(20);
+
+    // setPointData5a1();
+    // setPointData5a2();
+    // setPointData5a3();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, bufferCoords);
     gl.bufferData(gl.ARRAY_BUFFER, pointCoords, gl.STREAM_DRAW);
