@@ -260,6 +260,13 @@ function mul(v, s) {
 function div(v, s) {
     return new Vector2(v.x/s, v.y/s)
 }
+
+function assert(condition) {
+    if (!condition) {
+        throw "Assertion failed";
+    }
+}
+
 // https://www.desmos.com/calculator/3q1paue8hv
 function updatePointCoordsForFrame() { // called during an animation, before each frame.
     
@@ -268,6 +275,20 @@ function updatePointCoordsForFrame() { // called during an animation, before eac
         let size = pointSizes[i]/2;
         let xid = 2*i;
         let yid = xid + 1;
+        
+        assert(!isNaN(pointSizes[i]))
+        assert(!isNaN(pointCoords[xid]))
+        assert(!isNaN(pointCoords[yid]))
+        assert(!isNaN(pointVelocities[xid]))
+        assert(!isNaN(pointVelocities[yid]))
+
+        assert(!isNaN(pointRandomColors[3*i]))
+        assert(!isNaN(pointRandomColors[3*i+1]))
+        assert(!isNaN(pointRandomColors[3*i+2]))
+
+
+
+        
 
         pointCoords[xid] += pointVelocities[xid];
         pointCoords[yid] += pointVelocities[yid];
