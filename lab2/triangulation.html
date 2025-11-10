@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<!--
+   This page shows an animation of colored disks moving around
+   in a canvas, bouncing off the edges.  The program uses WebGL.
+   All of the points are drawn as single primitive of type POINTS.
+   The color is an attribute in the vertex shader, allowing
+   each point to be a different primitive.  The user can decide
+   whether to have randomly colored points or to make all the
+   points red.  The point size is a uniform variable, so all
+   the points are the same size.  However, the user can select
+   whether the size is large or small.
+-->
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Triangulation</title>
+<style>
+    label {
+        margin-left: 30px;
+    }
+</style>
+
+<script>
+"use strict";
+
+
+
+let canvas;  // The canvas where WebGL draws.
+let gl;  // The WebGL graphics context.
+
+
+
+class Vector2 {
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+}
+
+function dot(v1, v2) {
+    return v1.x*v2.x + v1.y*v2.y
+}
+
+function sub(v1, v2) {
+    return new Vector2(v1.x - v2.x, v1.y - v2.y)
+}
+
+function add(v1, v2) {
+    return new Vector2(v1.x + v2.x, v1.y + v2.y)
+}
+
+function mul(v, s) {
+    return new Vector2(v.x*s, v.y*s)
+}
+
+function div(v, s) {
+    return new Vector2(v.x/s, v.y/s)
+}
+
+function assert(condition) {
+    if (!condition) {
+        throw "Assertion failed";
+    }
+}
+
+class Vector4 {
+    constructor(x, y, z, w) {
+        this.x = x
+        this.y = y
+        this.z = z
+        this.w = w
+    }
+}
+
+
+const black = new Vector4(0, 0, 0, 1)
+const gray = new Vector4(0.4, 0.4, 0.4, 1)
+const gold = new Vector4(1, 215/255, 0, 1)
+const red = new Vector4(1, 0, 0, 1)
+const green = new Vector4(0, 0.5, 0, 1)
+const blue = new Vector4(0.5, 0, 0, 1)
+
+
+
+function update(state) {
+
+    // 
+
+}
+
+function draw(state) {
+
+    let background_color = gray
+
+    gl.clearColor(background_color.x, background_color.y, background_color.z, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    
+    
+    let  randomColors = document.getElementById("colorCheckbox").checked;
+    let  pointsize = Number(document.getElementById("sizeChoice").value);
+    
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufferCoords);
+    gl.bufferData(gl.ARRAY_BUFFER, pointCoords, gl.STREAM_DRAW);
+    
+    
+    gl.useProgram(prog)
+    gl.uniform1f(gl.getUniformLocation(prog, "u_height"), canvas.height);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_width"), canvas.width);
+    gl.uniform1f(gl.getUniformLocation(prog, "u_dotSize"), 7.0)
+    
+   
+    gl.drawArrays(gl.POINTS, 0, POINT_COUNT);
+    
+}
+
+function createShaderProgram(vertexShaderSource, fragmentShaderSource) {
+   let  vsh = gl.createShader( gl.VERTEX_SHADER );
+   gl.shaderSource( vsh, vertexShaderSource );
+   gl.compileShader( vsh );
+   if ( ! gl.getShaderParameter(vsh, gl.COMPILE_STATUS) ) {
+      throw new Error("Error in vertex shader:  " + gl.getShaderInfoLog(vsh));
+   }
+   let  fsh = gl.createShader( gl.FRAGMENT_SHADER );
+   gl.shaderSource( fsh, fragmentShaderSource );
+   gl.compileShader( fsh );
+   if ( ! gl.getShaderParameter(fsh, gl.COMPILE_STATUS) ) {
+      throw new Error("Error in fragment shader:  " + gl.getShaderInfoLog(fsh));
+   }
+   let  prog = gl.createProgram();
+   gl.attachShader( prog, vsh );
+   gl.attachShader( prog, fsh );
+   gl.linkProgram( prog );
+   if ( ! gl.getProgramParameter( prog, gl.LINK_STATUS) ) {
+      throw new Error("Link error in program:  " + gl.getProgramInfoLog(prog));
+   }
+   return prog;
+}
+
+let g_state;
+
+function doFrame() {
+    update();
+    draw();
+    requestAnimationFrame(doFrame);
+}
+
+function getRandom(minval, maxval) {
+    return minval + Math.random() * (maxval - minval);
+}
+
+function getRandomInt(minval, maxval) {
+    return Math.round(getRandom(minval, maxval));
+}
+
+
+function resetState(state) {
+
+    const minCount = 10;
+    const maxCount = 100;
+
+    state.pointCount = minCount;
+    state.triangleColor = blue;
+    state.lineColor = red;
+
+    switch (document.getElementById("amountChoice").value) {
+        case "random": state.pointCount = getRandomInt(minCount, maxCount); break;
+        case "min": state.pointCount = minCount; break;
+        case "max": state.pointCount = maxCount; break;
+    }
+    switch (document.getElementById("trianglecolorChoice").value) {
+        case "blue": state.triangleColor = blue; break;
+        case "red": state.triangleColor = red; break;
+        case "green": state.triangleColor = green; break;
+    }
+    switch (document.getElementById("linecolorChoice").value) {
+        case "red": state.lineColor = red; break;
+        case "green": state.lineColor = green; break;
+        case "blue": state.lineColor = blue; break;
+    }
+
+    state.pointCoords = new Float32Array(2*state.pointCount)
+
+    const offset = 50
+    for (let i = 0; i < 2*state.pointCount; ++i) {
+        state.pointCoords[0] = getRandom(offset, canvas.width - offset);
+        state.pointCoords[1] = getRandom(offset, canvas.height - offset);
+    }
+
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
+    gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
+}
+
+function stateChangeCallback() {
+    resetState(g_state)
+}
+
+
+const trianglevert =`#version 300 es
+    layout(location = 0) in vec2 a_coords;
+
+    uniform float u_width;
+    uniform float u_height;
+    
+    void main() {
+        float x = -1.0 + 2.0*(a_coords.x / u_width);
+        float y = 1.0 - 2.0*(a_coords.y / u_height);
+        gl_Position = vec4(x, y, 0.0, 1.0);
+    }`;
+
+const trianglefrag =`#version 300 es
+    precision highp float;
+    
+    uniform float u_color;
+ 
+    out vec4 o_color;
+    
+    void main() {
+        o_color = u_color;
+    }`;
+
+function init() {
+    try {canvas = document.getElementById("webglcanvas");}
+    catch (e) {
+        console.log(e)
+        return
+    }
+    gl = canvas.getContext("webgl2", {alpha: false, depth: false});
+    if (!gl) {
+        console.log("Browser does not support WebGL");
+        return
+    }
+    document.getElementById("amountChoice").onchange = stateChangeCallback;
+    document.getElementById("trianglecolorChoice").onchange = stateChangeCallback;
+    document.getElementById("linecolorChoice").onchange = stateChangeCallback;
+
+
+    console.log(gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    console.log(gl.getParameter(gl.VERSION));
+    console.log(gl.getParameter(gl.RENDERER));
+
+    let triangleShader = createShaderProgram(trianglevert, trianglefrag);
+    let lineShader = createShaderProgram(trianglevert, trianglefrag);
+    
+    g_state.glCoords = gl.createBuffer();
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+
+    resetState(g_state);
+    update(g_state)
+    draw(g_state)
+}
+
+
+window.onload = init;  // Arrange for init() to be called after page has loaded.
+
+</script>
+</head>
+<body>
+
+<h2>Triangulation</h2>
+
+<noscript><p><b>Sorry, but this page requires JavaScript.</b></p></noscript>
+
+<p>
+    <label>
+        <b>Point Amount:</b>
+        <select id="amountChoice">
+            <option value="random">Random</option>
+            <option value="min">Min</option>
+            <option value="max">Max</option>
+        </select>
+    </label>
+        <label>
+        <b>Triangle Color:</b>
+        <select id="trianglecolorChoice">
+            <option value="blue">Blue</option>
+            <option value="red">Red</option>
+            <option value="green">Green</option>
+        </select>
+    </label>
+    </label>
+        <label>
+        <b>Edge Color:</b>
+        <select id="linecolorChoice">
+            <option value="red">Red</option>
+            <option value="green">Green</option>
+            <option value="blue">Blue</option>
+        </select>
+    </label>
+</p>
+
+
+<div id="canvas-holder">
+<canvas id="webglcanvas" width="800" height="600"></canvas>
+</div>
+
+</body>
+</html>
