@@ -74,7 +74,6 @@ class Vector4 {
     }
 }
 
-
 const black = new Vector4(0, 0, 0, 1)
 const gray = new Vector4(0.4, 0.4, 0.4, 1)
 const gold = new Vector4(1, 215/255, 0, 1)
@@ -82,10 +81,89 @@ const red = new Vector4(1, 0, 0, 1)
 const green = new Vector4(0, 0.5, 0, 1)
 const blue = new Vector4(0.5, 0, 0, 1)
 
+// https://www.desmos.com/calculator/3r1fajunz6
+function convexHull(state, upperHull, lowerHull, sortedIndicies) {
 
+    let hull = [sortedIndicies[0], sortedIndicies[1]];
+
+    let len = len(sortedIndicies);
+
+    for (let i = 2; i < len; ++i) {
+
+        hull.push(sortedIndicies[i])
+        
+        let hullLen = len(Hull)
+        
+        let v1 = getPos(state, hullLen - 3);
+        let v2 = getPos(state, hullLen - 2);
+        let v3 = getPos(state, hullLen - 1);
+
+        
+        let projectedScale = (v3.x - v1.x)*(v2.y - v1.y) + (v3.y - v1.y)*(v1.x - v2.x);
+        if (projectedScale <= 0) {
+            hull.splice(hullLen - 2, 1)   
+        }
+    }
+
+    hull.push(sortedIndicies[len - 1])
+    hull.push(sortedIndicies[len - 2])
+
+    for (let i = len - 2; i-- > 0;) {
+
+        hull.push(sortedIndicies[i])
+        
+        let hullLen = len(Hull)
+        
+        let v1 = getPos(state, hullLen - 3);
+        let v2 = getPos(state, hullLen - 2);
+        let v3 = getPos(state, hullLen - 1);
+
+        
+        let projectedScale = (v3.x - v1.x)*(v2.y - v1.y) + (v3.y - v1.y)*(v1.x - v2.x);
+        if (projectedScale > 0) {
+            hull.splice(hullLen - 2, 1)   
+        }
+    }
+
+    return hull;
+}
+
+function getPos(state, id) {
+    return new Vector2(state.pointCoords[2*id], state.pointCoords[2*id+1])
+}
+
+
+class Triangle {
+    constructor(i1, i2, i3) {
+        this.i1 = i1;
+        this.i2 = i2;
+        this.i3 = i3;
+    }
+}
 
 function update(state) {
 
+    let indicies = new Uint32Array(state.pointCount);
+    for (let i = 0; i < state.pointCount; ++i) {
+        indicies[i] = i;
+    }
+    // sort indicies according to x
+    indicies.sort(function (a, b) {
+        return getPos(state, a).x - getPos(state, b).x;
+    });
+
+    let triangles = [new Triangle(indicies[0], indicies[1], indicies[2])];
+
+    let upperHull = [indicies[0], indicies[1]];
+    let lowerHull = [];
+    //TODO
+    assert(false && "TODO");
+
+    for (let i = 3; i < len(indicies); ++i) {
+
+        let hull = convexHull(state, indicies.slice(0, i));
+
+    }
 }
 
 function draw(state) {
@@ -135,13 +213,6 @@ function createShaderProgram(vertexShaderSource, fragmentShaderSource) {
       throw new Error("Link error in program:  " + gl.getProgramInfoLog(prog));
    }
    return prog;
-}
-
-
-function doFrame() {
-    update();
-    draw();
-    requestAnimationFrame(doFrame);
 }
 
 function getRandom(minval, maxval) {
@@ -215,7 +286,7 @@ const trianglefrag =`#version 300 es
     }`;
 
 function init() {
-    try {canvas = document.getElementById("webglcanvas");}
+    try {canvas = document.getElementById("webglcanvas")}
     catch (e) {
         console.log(e)
         return
@@ -244,8 +315,8 @@ function init() {
     console.log(gl.getParameter(gl.VERSION));
     console.log(gl.getParameter(gl.RENDERER));
 
-    let triangleShader = createShaderProgram(trianglevert, trianglefrag);
-    let lineShader = createShaderProgram(trianglevert, trianglefrag);
+    state.triangleShader = createShaderProgram(trianglevert, trianglefrag);
+    state.lineShader = createShaderProgram(trianglevert, trianglefrag);
     
     state.glCoords = gl.createBuffer();
 
