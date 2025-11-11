@@ -86,8 +86,6 @@ const blue = new Vector4(0.5, 0, 0, 1)
 
 function update(state) {
 
-    // 
-
 }
 
 function draw(state) {
@@ -139,7 +137,6 @@ function createShaderProgram(vertexShaderSource, fragmentShaderSource) {
    return prog;
 }
 
-let g_state;
 
 function doFrame() {
     update();
@@ -156,6 +153,14 @@ function getRandomInt(minval, maxval) {
 }
 
 
+function getColorfromstr(colorstr) {
+    switch (colorstr) {
+        case "red": return red; break;
+        case "green": return green; break;
+        case "blue": return blue; break;
+    }
+}
+
 function resetState(state) {
 
     const minCount = 10;
@@ -170,16 +175,8 @@ function resetState(state) {
         case "min": state.pointCount = minCount; break;
         case "max": state.pointCount = maxCount; break;
     }
-    switch (document.getElementById("trianglecolorChoice").value) {
-        case "blue": state.triangleColor = blue; break;
-        case "red": state.triangleColor = red; break;
-        case "green": state.triangleColor = green; break;
-    }
-    switch (document.getElementById("linecolorChoice").value) {
-        case "red": state.lineColor = red; break;
-        case "green": state.lineColor = green; break;
-        case "blue": state.lineColor = blue; break;
-    }
+    state.triangleColor = getColorfromstr(document.getElementById("trianglecolorChoice").value)
+    state.lineColor = getColorfromstr(document.getElementById("linecolorChoice").value)
 
     state.pointCoords = new Float32Array(2*state.pointCount)
 
@@ -193,11 +190,6 @@ function resetState(state) {
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
     gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
 }
-
-function stateChangeCallback() {
-    resetState(g_state)
-}
-
 
 const trianglevert =`#version 300 es
     layout(location = 0) in vec2 a_coords;
@@ -233,10 +225,20 @@ function init() {
         console.log("Browser does not support WebGL");
         return
     }
-    document.getElementById("amountChoice").onchange = stateChangeCallback;
-    document.getElementById("trianglecolorChoice").onchange = stateChangeCallback;
-    document.getElementById("linecolorChoice").onchange = stateChangeCallback;
+    let state;
 
+    document.getElementById("amountChoice").onchange = function () {
+        resetState(state)
+        draw(state)
+    };
+    document.getElementById("trianglecolorChoice").onchange = function () {
+        state.triangleColor = getColorfromstr(document.getElementById("trianglecolorChoice").value)
+        draw(state)
+    };
+    document.getElementById("linecolorChoice").onchange = function () {
+        state.lineColor = getColorfromstr(document.getElementById("linecolorChoice").value)
+        draw(state)
+    };
 
     console.log(gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
     console.log(gl.getParameter(gl.VERSION));
@@ -245,15 +247,15 @@ function init() {
     let triangleShader = createShaderProgram(trianglevert, trianglefrag);
     let lineShader = createShaderProgram(trianglevert, trianglefrag);
     
-    g_state.glCoords = gl.createBuffer();
+    state.glCoords = gl.createBuffer();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(0);
 
-    resetState(g_state);
-    update(g_state)
-    draw(g_state)
+    resetState(state);
+    update(state)
+    draw(state)
 }
 
 
