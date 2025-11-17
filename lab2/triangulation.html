@@ -162,7 +162,7 @@ function visibleRangeLeft(state, hull, activePoint) {
         let next = (mid + 1) % hull.length;
         let prev = (mid - 1 + hull.length) % hull.length;
         
-        let midv = getPos(state, mid);
+        let midv = getPos(state, hull[mid]);
 
         let oprev = orientation(av, midv, getPos(state, hull[next]));
         let onext = orientation(av, midv, getPos(state, hull[prev]))  
@@ -193,7 +193,7 @@ function visibleRangeRight(state, hull, activePoint) {
         let next = (mid + 1) % hull.length;
         let prev = (mid - 1 + hull.length) % hull.length;
         
-        let midv = getPos(state, mid);
+        let midv = getPos(state, hull[mid]);
 
         let oprev = orientation(av, midv, getPos(state, hull[next]));
         let onext = orientation(av, midv, getPos(state, hull[prev]))  
@@ -241,15 +241,10 @@ function update(state) {
     state.triangleIndicies = new Uint32Array(triangles.length*3);
 
     for (let i = 0; i < triangles.length; ++i) {
-        state.triangleIndicies[i] = triangles[i].i1;
-        state.triangleIndicies[i+1] = triangles[i].i2;
-        state.triangleIndicies[i+2] = triangles[i].i3;
+        state.triangleIndicies[3*i] = triangles[i].i1;
+        state.triangleIndicies[3*i+1] = triangles[i].i2;
+        state.triangleIndicies[3*i+2] = triangles[i].i3;
     }
-
-
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.gltriangleIndicies);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, state.triangleIndicies, gl.STREAM_DRAW)
-
 }
 
 
@@ -259,21 +254,35 @@ function draw(state) {
 
     gl.clearColor(background_color.x, background_color.y, background_color.z, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-     
     
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
     gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
+
+
     
+    gl.useProgram(state.pointShader)
+    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_height"), canvas.height);
+    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_width"), canvas.width);
+    gl.uniform4f(gl.getUniformLocation(state.pointShader, "u_color"), red.x, red.y, red.z, red.w);
+    gl.drawArrays(gl.POINTS, 0, state.pointCount);
+    
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.gltriangleIndicies);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, state.triangleIndicies, gl.STREAM_DRAW)
+
     
     gl.useProgram(state.triangleShader)
     gl.uniform1f(gl.getUniformLocation(state.triangleShader, "u_height"), canvas.height);
     gl.uniform1f(gl.getUniformLocation(state.triangleShader, "u_width"), canvas.width);
-    gl.uniform4f(gl.getUniformLocation(state.triangleShader, "u_color"), red.x, red.y, red.z, red.w);
-    
-    gl.drawArrays(gl.POINTS, 0, state.pointCount);
-
     gl.uniform4f(gl.getUniformLocation(state.triangleShader, "u_color"), state.triangleColor.x, state.triangleColor.y, state.triangleColor.z, state.triangleColor.w);
-    gl.drawElements(gl.GL_TRIANGLES, state.triangleIndicies.length / 3, GL_UNSIGNED_INT, state.triangleIndicies);
+    gl.drawElements(gl.TRIANGLES, state.triangleIndicies.length, gl.UNSIGNED_INT, 0);
+
+
+    // gl.useProgram(state.lineShader)
+    // gl.uniform1f(gl.getUniformLocation(state.lineShader, "u_height"), canvas.height);
+    // gl.uniform1f(gl.getUniformLocation(state.lineShader, "u_width"), canvas.width);
+    // gl.uniform4f(gl.getUniformLocation(state.lineShader, "u_color"), state.lineColor.x, state.lineColor.y, state.lineColor.z, state.lineColor.w);
+    // gl.drawElements(gl.LINES, state.triangleIndicies.length / 3, gl.UNSIGNED_INT, 0);
+
 }
 
 function createShaderProgram(vertexShaderSource, fragmentShaderSource) {
@@ -346,7 +355,7 @@ function resetState(state) {
     gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
 }
 
-const trianglevert =`#version 300 es
+const pointvert =`#version 300 es
     layout(location = 0) in vec2 a_coords;
 
     uniform float u_width;
@@ -357,6 +366,29 @@ const trianglevert =`#version 300 es
         float y = 1.0 - 2.0*(a_coords.y / u_height);
         gl_Position = vec4(x, y, 0.0, 1.0);
         gl_PointSize = 5.0;
+    }`;
+
+const pointfrag =`#version 300 es
+    precision highp float;
+    
+    uniform vec4 u_color;
+ 
+    out vec4 o_color;
+    
+    void main() {
+        o_color = u_color;
+    }`;
+
+const trianglevert =`#version 300 es
+    layout(location = 0) in vec2 a_coords;
+
+    uniform float u_width;
+    uniform float u_height;
+    
+    void main() {
+        float x = -1.0 + 2.0*(a_coords.x / u_width);
+        float y = 1.0 - 2.0*(a_coords.y / u_height);
+        gl_Position = vec4(x, y, 0.0, 1.0);
     }`;
 
 const trianglefrag =`#version 300 es
@@ -401,10 +433,11 @@ function init() {
     console.log(gl.getParameter(gl.RENDERER));
 
     state.triangleShader = createShaderProgram(trianglevert, trianglefrag);
+    state.pointShader = createShaderProgram(pointvert, pointfrag);
     state.lineShader = createShaderProgram(trianglevert, trianglefrag);
 
     state.gltriangleIndicies = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.triangleIndicies);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.gltriangleIndicies);
 
 
     state.glCoords = gl.createBuffer();
