@@ -74,58 +74,62 @@ class Vector4 {
     }
 }
 
+
+// > 0 right turn
+// < 0 left turn
+function orientation(v1, v2, v3) {
+    return (v3.x - v1.x)*(v2.y - v1.y) + (v3.y - v1.y)*(v1.x - v2.x)
+}
+
 const black = new Vector4(0, 0, 0, 1)
 const gray = new Vector4(0.4, 0.4, 0.4, 1)
 const gold = new Vector4(1, 215/255, 0, 1)
 const red = new Vector4(1, 0, 0, 1)
 const green = new Vector4(0, 0.5, 0, 1)
-const blue = new Vector4(0.5, 0, 0, 1)
+const blue = new Vector4(0, 0, 0.5, 1)
 
 // https://www.desmos.com/calculator/3r1fajunz6
-function convexHull(state, upperHull, lowerHull, sortedIndicies) {
+function convexHull(state, sortedIndicies) {
 
-    let hull = [sortedIndicies[0], sortedIndicies[1]];
+    let upperHull = [sortedIndicies[0], sortedIndicies[1]];
 
-    let len = len(sortedIndicies);
 
-    for (let i = 2; i < len; ++i) {
+    for (let i = 2; i < sortedIndicies.length; ++i) {
 
-        hull.push(sortedIndicies[i])
-        
-        let hullLen = len(Hull)
-        
-        let v1 = getPos(state, hullLen - 3);
-        let v2 = getPos(state, hullLen - 2);
-        let v3 = getPos(state, hullLen - 1);
+        upperHull.push(sortedIndicies[i])
+             
+        let v1 = getPos(state, upperHull.length - 3);
+        let v2 = getPos(state, upperHull.length - 2);
+        let v3 = getPos(state, upperHull.length - 1);
 
         
-        let projectedScale = (v3.x - v1.x)*(v2.y - v1.y) + (v3.y - v1.y)*(v1.x - v2.x);
+        let projectedScale = orientation(v1, v2, v3);
         if (projectedScale <= 0) {
-            hull.splice(hullLen - 2, 1)   
+            upperHull.splice(upperHull.length - 2, 1)   
         }
     }
 
-    hull.push(sortedIndicies[len - 1])
-    hull.push(sortedIndicies[len - 2])
+    let lowerHull = [sortedIndicies[sortedIndicies.length - 1], sortedIndicies[sortedIndicies.length - 2]]
 
-    for (let i = len - 2; i-- > 0;) {
+    for (let i = sortedIndicies.length - 2; i-- > 0;) {
 
-        hull.push(sortedIndicies[i])
-        
-        let hullLen = len(Hull)
-        
-        let v1 = getPos(state, hullLen - 3);
-        let v2 = getPos(state, hullLen - 2);
-        let v3 = getPos(state, hullLen - 1);
+        lowerHull.push(sortedIndicies[i])
+               
+        let v1 = getPos(state, lowerHull.length - 3);
+        let v2 = getPos(state, lowerHull.length - 2);
+        let v3 = getPos(state, lowerHull.length - 1);
 
         
-        let projectedScale = (v3.x - v1.x)*(v2.y - v1.y) + (v3.y - v1.y)*(v1.x - v2.x);
+        let projectedScale = orientation(v1, v2, v3);
         if (projectedScale > 0) {
-            hull.splice(hullLen - 2, 1)   
+            lowerHull.splice(lowerHull.length - 2, 1)   
         }
     }
 
-    return hull;
+    lowerHull.splice(lowerHull.length - 1, 1)
+    lowerHull.splice(0, 1)
+
+    return upperHull.concat(lowerHull);
 }
 
 function getPos(state, id) {
@@ -141,6 +145,76 @@ class Triangle {
     }
 }
 
+function TriangulateMonotone(state, triangles, visibleHull, activePoint) {
+
+
+
+}
+
+function visibleRangeLeft(state, hull, activePoint) {
+    let av = getPos(state, activePoint);
+    
+    let start = 0;
+    let end = hull.length;
+    
+    while (start < end) {
+        let mid = Math.floor((start + end) / 2);
+        let next = (mid + 1) % hull.length;
+        let prev = (mid - 1 + hull.length) % hull.length;
+        
+        let midv = getPos(state, mid);
+
+        let oprev = orientation(av, midv, getPos(state, hull[next]));
+        let onext = orientation(av, midv, getPos(state, hull[prev]))  
+
+        if (onext > 0 && oprev > 0) {
+            return mid
+        }
+
+        if (onext <= 0) {
+            start = mid + 1;
+        } else {
+            end = mid;
+        }
+
+    }
+
+    return start  % hull.length;
+}
+
+function visibleRangeRight(state, hull, activePoint) {
+    let av = getPos(state, activePoint);
+    
+    let start = 0;
+    let end = hull.length;
+    
+    while (start < end) {
+        let mid = Math.floor((start + end) / 2);
+        let next = (mid + 1) % hull.length;
+        let prev = (mid - 1 + hull.length) % hull.length;
+        
+        let midv = getPos(state, mid);
+
+        let oprev = orientation(av, midv, getPos(state, hull[next]));
+        let onext = orientation(av, midv, getPos(state, hull[prev]))  
+
+        if (onext < 0 && oprev < 0) {
+            return mid
+        }
+
+        if (onext >= 0) {
+            start = mid + 1;
+        } else {
+            end = mid;
+        }
+
+    }
+
+    return start  % hull.length;
+}
+
+
+
 function update(state) {
 
     let indicies = new Uint32Array(state.pointCount);
@@ -154,17 +228,30 @@ function update(state) {
 
     let triangles = [new Triangle(indicies[0], indicies[1], indicies[2])];
 
-    let upperHull = [indicies[0], indicies[1]];
-    let lowerHull = [];
-    //TODO
-    assert(false && "TODO");
+    for (let i = 3; i < indicies.length; ++i) {
 
-    for (let i = 3; i < len(indicies); ++i) {
+        let activePoint = indicies[i];
 
-        let hull = convexHull(state, indicies.slice(0, i));
+        let hull = convexHull(state, indicies.slice(0, i+1));
+
+        visibleRangeLeft(state, hull, activePoint)
 
     }
+
+    state.triangleIndicies = new Uint32Array(triangles.length*3);
+
+    for (let i = 0; i < triangles.length; ++i) {
+        state.triangleIndicies[i] = triangles[i].i1;
+        state.triangleIndicies[i+1] = triangles[i].i2;
+        state.triangleIndicies[i+2] = triangles[i].i3;
+    }
+
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.gltriangleIndicies);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, state.triangleIndicies, gl.STREAM_DRAW)
+
 }
+
 
 function draw(state) {
 
@@ -172,24 +259,21 @@ function draw(state) {
 
     gl.clearColor(background_color.x, background_color.y, background_color.z, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
+     
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
+    gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
     
     
-    let  randomColors = document.getElementById("colorCheckbox").checked;
-    let  pointsize = Number(document.getElementById("sizeChoice").value);
+    gl.useProgram(state.triangleShader)
+    gl.uniform1f(gl.getUniformLocation(state.triangleShader, "u_height"), canvas.height);
+    gl.uniform1f(gl.getUniformLocation(state.triangleShader, "u_width"), canvas.width);
+    gl.uniform4f(gl.getUniformLocation(state.triangleShader, "u_color"), red.x, red.y, red.z, red.w);
     
-    
-    gl.bindBuffer(gl.ARRAY_BUFFER, bufferCoords);
-    gl.bufferData(gl.ARRAY_BUFFER, pointCoords, gl.STREAM_DRAW);
-    
-    
-    gl.useProgram(prog)
-    gl.uniform1f(gl.getUniformLocation(prog, "u_height"), canvas.height);
-    gl.uniform1f(gl.getUniformLocation(prog, "u_width"), canvas.width);
-    gl.uniform1f(gl.getUniformLocation(prog, "u_dotSize"), 7.0)
-    
-   
-    gl.drawArrays(gl.POINTS, 0, POINT_COUNT);
-    
+    gl.drawArrays(gl.POINTS, 0, state.pointCount);
+
+    gl.uniform4f(gl.getUniformLocation(state.triangleShader, "u_color"), state.triangleColor.x, state.triangleColor.y, state.triangleColor.z, state.triangleColor.w);
+    gl.drawElements(gl.GL_TRIANGLES, state.triangleIndicies.length / 3, GL_UNSIGNED_INT, state.triangleIndicies);
 }
 
 function createShaderProgram(vertexShaderSource, fragmentShaderSource) {
@@ -253,8 +337,8 @@ function resetState(state) {
 
     const offset = 50
     for (let i = 0; i < 2*state.pointCount; ++i) {
-        state.pointCoords[0] = getRandom(offset, canvas.width - offset);
-        state.pointCoords[1] = getRandom(offset, canvas.height - offset);
+        state.pointCoords[i] = getRandom(offset, canvas.width - offset);
+        state.pointCoords[i+1] = getRandom(offset, canvas.height - offset);
     }
 
 
@@ -272,12 +356,13 @@ const trianglevert =`#version 300 es
         float x = -1.0 + 2.0*(a_coords.x / u_width);
         float y = 1.0 - 2.0*(a_coords.y / u_height);
         gl_Position = vec4(x, y, 0.0, 1.0);
+        gl_PointSize = 5.0;
     }`;
 
 const trianglefrag =`#version 300 es
     precision highp float;
     
-    uniform float u_color;
+    uniform vec4 u_color;
  
     out vec4 o_color;
     
@@ -296,7 +381,7 @@ function init() {
         console.log("Browser does not support WebGL");
         return
     }
-    let state;
+    let state = {};
 
     document.getElementById("amountChoice").onchange = function () {
         resetState(state)
@@ -317,7 +402,11 @@ function init() {
 
     state.triangleShader = createShaderProgram(trianglevert, trianglefrag);
     state.lineShader = createShaderProgram(trianglevert, trianglefrag);
-    
+
+    state.gltriangleIndicies = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.triangleIndicies);
+
+
     state.glCoords = gl.createBuffer();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
