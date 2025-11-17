@@ -145,11 +145,7 @@ class Triangle {
     }
 }
 
-function TriangulateMonotone(state, triangles, visibleHull, activePoint) {
 
-
-
-}
 
 function visibleRangeLeft(state, hull, activePoint) {
     let av = getPos(state, activePoint);
@@ -210,10 +206,69 @@ function visibleRangeRight(state, hull, activePoint) {
 
     }
 
-    return start  % hull.length;
+    return start % hull.length;
 }
 
 
+function TriangulateMonotone(state, triangles, visibleHull, activePoint) {
+
+
+    visibleHull.push(activePoint); 
+
+    let min = 0;
+    let max = 0;
+
+    for (let i = 0; i < visibleHull.length; ++i) {
+
+        let v = getPos(state, visibleHull[i]);
+        
+        if (v.y < getPos(state, visibleHull[min]).y) min = i;
+        if (v.y > getPos(state, visibleHull[max]).y) max = i;
+    }
+
+    let isLeftChain = {};
+    let i = max;
+    while (i != min) {
+        isLeftChain[visibleHull[i]] = true;
+        i = (i + 1) % visibleHull.length;
+    }
+    isLeftChain[visibleHull[min]] = true;
+
+    // sort visibleHull decreasing according to y
+    visibleHull.sort(function (a, b) {
+        return getPos(state, b).y - getPos(state, a).y;
+    });
+
+    let stack = [visibleHull[0], visibleHull[1]]
+
+
+    for (let i = 2; i < visibleHull.length; ++i) {
+
+        let u = visibleHull[i]
+
+        if (isLeftChain[u] == isLeftChain[stack[stack.length - 1]]) {
+            let v = stack.pop()
+
+            while (stack.length != 0) {
+                triangles.push(new Triangle(prev, next, u));
+            }
+
+        } else {
+
+            let prev = stack.pop();
+
+            while (stack.length != 0) {
+                let next = stack.pop();
+                triangles.push(new Triangle(prev, next, u));
+                prev = next;
+            }
+            stack.push(visibleHull[i - 1]);
+            stack.push(u);
+        }
+
+    }
+
+}
 
 function update(state) {
 
@@ -234,8 +289,10 @@ function update(state) {
 
         let hull = convexHull(state, indicies.slice(0, i+1));
 
-        visibleRangeLeft(state, hull, activePoint)
+        let leftmost = visibleRangeLeft(state, hull, activePoint);
+        let rightmost = visibleRangeRight(state, hull, activePoint);
 
+        TriangulateMonotone(state, triangles, hull.slice(leftmost, rightmost), activePoint);
     }
 
     state.triangleIndicies = new Uint32Array(triangles.length*3);
