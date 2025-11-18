@@ -75,11 +75,21 @@ class Vector4 {
 }
 
 
-// > 0 right turn
-// < 0 left turn
-function orientation(v1, v2, v3) {
-    return (v3.x - v1.x)*(v2.y - v1.y) + (v3.y - v1.y)*(v1.x - v2.x)
+// < 0 right turn
+// > 0 left turn
+function orient(v1, v2, v3) {
+    let v = (v3.y - v1.y)*(v2.x - v1.x) - (v3.x - v1.x)*(v2.y - v1.y);
+    return -v; // -v because y coordinate is flipped in webgl
 }
+
+function rightTurn(v1, v2, v3) {
+    return orient(v1, v2, v3) < 0;
+}
+
+function leftTurn(v1, v2, v3) {
+    return orient(v1, v2, v3) > 0;
+}
+
 
 const black = new Vector4(0, 0, 0, 1)
 const gray = new Vector4(0.4, 0.4, 0.4, 1)
@@ -97,15 +107,17 @@ function convexHull(state, sortedIndicies) {
     for (let i = 2; i < sortedIndicies.length; ++i) {
 
         upperHull.push(sortedIndicies[i])
-             
-        let v1 = getPos(state, upperHull.length - 3);
-        let v2 = getPos(state, upperHull.length - 2);
-        let v3 = getPos(state, upperHull.length - 1);
-
         
-        let projectedScale = orientation(v1, v2, v3);
-        if (projectedScale <= 0) {
-            upperHull.splice(upperHull.length - 2, 1)   
+        while (upperHull.length > 2) {
+            let v1 = getPos(state, upperHull[upperHull.length - 3]);
+            let v2 = getPos(state, upperHull[upperHull.length - 2]);
+            let v3 = getPos(state, upperHull[upperHull.length - 1]);
+    
+            if (rightTurn(v1, v2, v3)) {
+                break;
+            } else {
+                upperHull.splice(upperHull.length - 2, 1)   
+            }
         }
     }
 
@@ -114,16 +126,20 @@ function convexHull(state, sortedIndicies) {
     for (let i = sortedIndicies.length - 2; i-- > 0;) {
 
         lowerHull.push(sortedIndicies[i])
-               
-        let v1 = getPos(state, lowerHull.length - 3);
-        let v2 = getPos(state, lowerHull.length - 2);
-        let v3 = getPos(state, lowerHull.length - 1);
 
-        
-        let projectedScale = orientation(v1, v2, v3);
-        if (projectedScale > 0) {
-            lowerHull.splice(lowerHull.length - 2, 1)   
+        while (lowerHull.length > 2) {
+            let v1 = getPos(state, lowerHull[lowerHull.length - 3]);
+            let v2 = getPos(state, lowerHull[lowerHull.length - 2]);
+            let v3 = getPos(state, lowerHull[lowerHull.length - 1]);
+    
+            if (rightTurn(v1, v2, v3)) {
+                break;
+            } else {
+                lowerHull.splice(lowerHull.length - 2, 1)   
+            }
+
         }
+
     }
 
     lowerHull.splice(lowerHull.length - 1, 1)
@@ -146,86 +162,101 @@ class Triangle {
 }
 
 
-
 function visibleRangeLeft(state, hull, activePoint) {
     let av = getPos(state, activePoint);
     
     let start = 0;
-    let end = hull.length;
-    
-    while (start < end) {
-        let mid = Math.floor((start + end) / 2);
+    let end = hull.length - 1;
+    let mid = Math.floor((start + end) / 2);
+
+    while (start != mid && end != mid) {
+        mid = Math.floor((start + end) / 2);
         let next = (mid + 1) % hull.length;
         let prev = (mid - 1 + hull.length) % hull.length;
         
         let midv = getPos(state, hull[mid]);
 
-        let oprev = orientation(av, midv, getPos(state, hull[next]));
-        let onext = orientation(av, midv, getPos(state, hull[prev]))  
+        let prevv = getPos(state, hull[prev]);
+        let nextv = getPos(state, hull[next]);
 
-        if (onext > 0 && oprev > 0) {
+        let oprev = orient(av, midv, prevv);
+        let onext = orient(av, midv, nextv);
+
+        if (oprev < 0 && onext < 0) {
             return mid
         }
 
-        if (onext <= 0) {
-            start = mid + 1;
-        } else {
-            end = mid;
+        if (oprev > 0) {
+            end = (mid - 1 + hull.length) % hull.length 
+        } else if (onext > 0) {
+            start = (mid + 1) % hull.length ;
         }
-
     }
 
-    return start  % hull.length;
+    return mid % hull.length;
 }
-
 function visibleRangeRight(state, hull, activePoint) {
     let av = getPos(state, activePoint);
     
     let start = 0;
-    let end = hull.length;
-    
-    while (start < end) {
-        let mid = Math.floor((start + end) / 2);
+    let end = hull.length - 1;
+    let mid = Math.floor((start + end) / 2);
+
+    while (start != mid && end != mid) {
+        mid = Math.floor((start + end) / 2);
         let next = (mid + 1) % hull.length;
         let prev = (mid - 1 + hull.length) % hull.length;
         
         let midv = getPos(state, hull[mid]);
 
-        let oprev = orientation(av, midv, getPos(state, hull[next]));
-        let onext = orientation(av, midv, getPos(state, hull[prev]))  
+        let prevv = getPos(state, hull[prev]);
+        let nextv = getPos(state, hull[next]);
 
-        if (onext < 0 && oprev < 0) {
+        let oprev = orient(av, midv, prevv);
+        let onext = orient(av, midv, nextv);
+
+        if (oprev > 0 && onext > 0) {
             return mid
         }
 
-        if (onext >= 0) {
-            start = mid + 1;
-        } else {
-            end = mid;
+        if (oprev < 0) {
+            end = (mid - 1 + hull.length) % hull.length 
+        } else if (onext < 0) {
+            start = (mid + 1) % hull.length ;
         }
-
     }
 
-    return start % hull.length;
+    return mid % hull.length;
+}
+
+
+function TriangulateFan(state, triangles, visibleHull, activePoint) {
+
+    let prev = visibleHull[0];
+
+    for (let i = 1; i < visibleHull.length; ++i) {
+        let index = visibleHull[i];
+        triangles.push(new Triangle(prev, index, activePoint));
+        prev = index;
+    }
+
 }
 
 
 function TriangulateMonotone(state, triangles, visibleHull, activePoint) {
 
-
-    visibleHull.push(activePoint); 
-
+    
     let min = 0;
     let max = 0;
-
+    
     for (let i = 0; i < visibleHull.length; ++i) {
-
+        
         let v = getPos(state, visibleHull[i]);
         
         if (v.y < getPos(state, visibleHull[min]).y) min = i;
         if (v.y > getPos(state, visibleHull[max]).y) max = i;
     }
-
+    
     let isLeftChain = {};
     let i = max;
     while (i != min) {
@@ -233,7 +264,8 @@ function TriangulateMonotone(state, triangles, visibleHull, activePoint) {
         i = (i + 1) % visibleHull.length;
     }
     isLeftChain[visibleHull[min]] = true;
-
+    
+    visibleHull.push(activePoint); 
     // sort visibleHull decreasing according to y
     visibleHull.sort(function (a, b) {
         return getPos(state, b).y - getPos(state, a).y;
@@ -241,17 +273,22 @@ function TriangulateMonotone(state, triangles, visibleHull, activePoint) {
 
     let stack = [visibleHull[0], visibleHull[1]]
 
-
     for (let i = 2; i < visibleHull.length; ++i) {
 
-        let u = visibleHull[i]
+        let u = visibleHull[i];
+        let top = stack[stack.length - 1];
 
-        if (isLeftChain[u] == isLeftChain[stack[stack.length - 1]]) {
-            let v = stack.pop()
+        if (isLeftChain[u] == isLeftChain[top]) {
+            let prev = stack.pop();
 
-            while (stack.length != 0) {
+
+            while (stack.length != 0 && orient(top, prev, u) < 0)  {
+                let next = stack.pop();
                 triangles.push(new Triangle(prev, next, u));
+                prev = next;
             }
+            stack.push(prev)
+            stack.push(u)
 
         } else {
 
@@ -262,12 +299,14 @@ function TriangulateMonotone(state, triangles, visibleHull, activePoint) {
                 triangles.push(new Triangle(prev, next, u));
                 prev = next;
             }
+            // push u_i-1, u_i
             stack.push(visibleHull[i - 1]);
             stack.push(u);
         }
-
     }
-
+    while (stack.length != 0) {
+        stack.pop()
+    }
 }
 
 function update(state) {
@@ -281,20 +320,32 @@ function update(state) {
         return getPos(state, a).x - getPos(state, b).x;
     });
 
+
     let triangles = [new Triangle(indicies[0], indicies[1], indicies[2])];
 
     for (let i = 3; i < indicies.length; ++i) {
 
+        if (i == 8) break;
+
         let activePoint = indicies[i];
 
-        let hull = convexHull(state, indicies.slice(0, i+1));
+        let hull = convexHull(state, indicies.slice(0, i));
 
         let leftmost = visibleRangeLeft(state, hull, activePoint);
         let rightmost = visibleRangeRight(state, hull, activePoint);
 
-        TriangulateMonotone(state, triangles, hull.slice(leftmost, rightmost), activePoint);
-    }
+        
+        let visibleHull = [];
 
+        for (let i = rightmost; i != leftmost; i = (i + 1 + hull.length) % hull.length) {
+            visibleHull.push(hull[i])
+        }
+        visibleHull.push(hull[leftmost]);
+
+        TriangulateFan(state, triangles, visibleHull, activePoint);
+
+    }
+    
     state.triangleIndicies = new Uint32Array(triangles.length*3);
 
     for (let i = 0; i < triangles.length; ++i) {
@@ -315,14 +366,7 @@ function draw(state) {
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
     gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
 
-
-    
-    gl.useProgram(state.pointShader)
-    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_height"), canvas.height);
-    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_width"), canvas.width);
-    gl.uniform4f(gl.getUniformLocation(state.pointShader, "u_color"), red.x, red.y, red.z, red.w);
-    gl.drawArrays(gl.POINTS, 0, state.pointCount);
-    
+        
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.gltriangleIndicies);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, state.triangleIndicies, gl.STREAM_DRAW)
 
@@ -333,13 +377,20 @@ function draw(state) {
     gl.uniform4f(gl.getUniformLocation(state.triangleShader, "u_color"), state.triangleColor.x, state.triangleColor.y, state.triangleColor.z, state.triangleColor.w);
     gl.drawElements(gl.TRIANGLES, state.triangleIndicies.length, gl.UNSIGNED_INT, 0);
 
+    gl.useProgram(state.pointShader)
+    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_height"), canvas.height);
+    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_width"), canvas.width);
+    gl.uniform4f(gl.getUniformLocation(state.pointShader, "u_color"), red.x, red.y, red.z, red.w);
+    gl.drawArrays(gl.POINTS, 0, state.pointCount);
 
-    // gl.useProgram(state.lineShader)
-    // gl.uniform1f(gl.getUniformLocation(state.lineShader, "u_height"), canvas.height);
-    // gl.uniform1f(gl.getUniformLocation(state.lineShader, "u_width"), canvas.width);
-    // gl.uniform4f(gl.getUniformLocation(state.lineShader, "u_color"), state.lineColor.x, state.lineColor.y, state.lineColor.z, state.lineColor.w);
-    // gl.drawElements(gl.LINES, state.triangleIndicies.length / 3, gl.UNSIGNED_INT, 0);
+    gl.useProgram(state.lineShader)
+    gl.uniform1f(gl.getUniformLocation(state.lineShader, "u_height"), canvas.height);
+    gl.uniform1f(gl.getUniformLocation(state.lineShader, "u_width"), canvas.width);
+    gl.uniform4f(gl.getUniformLocation(state.lineShader, "u_color"), state.lineColor.x, state.lineColor.y, state.lineColor.z, state.lineColor.w);
 
+    for (let i = 0; i < state.triangleIndicies.length; i += 3) {
+        gl.drawElements(gl.LINE_LOOP, 3, gl.UNSIGNED_INT, i*4);
+    }
 }
 
 function createShaderProgram(vertexShaderSource, fragmentShaderSource) {
@@ -365,11 +416,27 @@ function createShaderProgram(vertexShaderSource, fragmentShaderSource) {
    return prog;
 }
 
+let vals = [
+    64.23719024658203, 544.35546875,
+    108.75343322753906, 271.3231201171875,
+    134.83912658691406, 342.890625,
+    225.19244384765625, 130.02928161621094,
+    297.04632568359375, 93.26069641113281,
+    334.1434326171875, 99.70037841796875,
+    408.9986877441406, 292.7887878417969,
+    428.8388671875, 237.37127685546875,
+    439.96392822265625, 483.65478515625,
+    573.4647827148438, 334.282958984375,
+]
+
+let counter = 0
 function getRandom(minval, maxval) {
+    return vals[counter++];
     return minval + Math.random() * (maxval - minval);
 }
 
 function getRandomInt(minval, maxval) {
+    return vals.length/2;
     return Math.round(getRandom(minval, maxval));
 }
 
@@ -402,11 +469,11 @@ function resetState(state) {
     state.pointCoords = new Float32Array(2*state.pointCount)
 
     const offset = 50
-    for (let i = 0; i < 2*state.pointCount; ++i) {
-        state.pointCoords[i] = getRandom(offset, canvas.width - offset);
-        state.pointCoords[i+1] = getRandom(offset, canvas.height - offset);
+    for (let i = 0; i < state.pointCount; ++i) {
+        state.pointCoords[2*i] = getRandom(offset, canvas.width - offset);
+        state.pointCoords[2*i+1] = getRandom(offset, canvas.height - offset);
     }
-
+    console.log(state.pointCoords)
 
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
     gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
@@ -494,9 +561,7 @@ function init() {
     state.lineShader = createShaderProgram(trianglevert, trianglefrag);
 
     state.gltriangleIndicies = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.gltriangleIndicies);
-
-
+    state.glLineIndicies = gl.createBuffer()
     state.glCoords = gl.createBuffer();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
