@@ -98,11 +98,25 @@ const red = new Vector4(1, 0, 0, 1)
 const green = new Vector4(0, 0.5, 0, 1)
 const blue = new Vector4(0, 0, 0.5, 1)
 
+function getHullElement(upperHull, lowerHull, index) {
+
+    let len = upperHull.length + lowerHull.length;
+
+    index = (index + len) % len
+
+    if (index < upperHull.length) {
+        return upperHull[index]
+    }
+
+    let newIndex = index - upperHull.length;
+    return lowerHull[newIndex];
+}
+
 // https://www.desmos.com/calculator/3r1fajunz6
-function convexHull(state, sortedIndicies) {
+function convexHull(state, sortedIndicies, upperHull, lowerHull) {
 
-    let upperHull = [sortedIndicies[0], sortedIndicies[1]];
-
+    upperHull.push(sortedIndicies[0])
+    upperHull.push(sortedIndicies[1])
 
     for (let i = 2; i < sortedIndicies.length; ++i) {
 
@@ -121,7 +135,8 @@ function convexHull(state, sortedIndicies) {
         }
     }
 
-    let lowerHull = [sortedIndicies[sortedIndicies.length - 1], sortedIndicies[sortedIndicies.length - 2]]
+    lowerHull.push(sortedIndicies[sortedIndicies.length - 1])
+    lowerHull.push(sortedIndicies[sortedIndicies.length - 2])
 
     for (let i = sortedIndicies.length - 2; i-- > 0;) {
 
@@ -323,27 +338,89 @@ function update(state) {
 
     let triangles = [new Triangle(indicies[0], indicies[1], indicies[2])];
 
+    let upperHull = []
+    let lowerHull = []
+
+    convexHull(state, indicies.slice(0, 3), upperHull, lowerHull)
+
+
     for (let i = 3; i < indicies.length; ++i) {
 
-        if (i == 8) break;
+        if (i == 9) break;
 
         let activePoint = indicies[i];
 
-        let hull = convexHull(state, indicies.slice(0, i));
 
-        let leftmost = visibleRangeLeft(state, hull, activePoint);
-        let rightmost = visibleRangeRight(state, hull, activePoint);
 
-        
-        let visibleHull = [];
+        // lower triangulation
+        {
+            let prevIndex = upperHull.length - 1;
+            while (true) {
+                let nextIndex = prevIndex + 1;
+                let prevv = getPos(state, getHullElement(upperHull, lowerHull, prevIndex));
+                let nextv = getPos(state, getHullElement(upperHull, lowerHull, nextIndex));
 
-        for (let i = rightmost; i != leftmost; i = (i + 1 + hull.length) % hull.length) {
-            visibleHull.push(hull[i])
+                if (rightTurn(getPos(state, activePoint), prevv, nextv)) {
+                    break;
+                }
+                triangles.push(new Triangle(getHullElement(upperHull, lowerHull, prevIndex), getHullElement(upperHull, lowerHull, nextIndex), activePoint))
+                prevIndex = nextIndex;
+            }
         }
-        visibleHull.push(hull[leftmost]);
 
-        TriangulateFan(state, triangles, visibleHull, activePoint);
+        // upper triangulation
+        {
+            let prevIndex = upperHull.length - 1;
+            while (true) {
+                let nextIndex = prevIndex - 1;
+                
+                let prevv = getPos(state, getHullElement(upperHull, lowerHull, prevIndex));
+                let nextv = getPos(state, getHullElement(upperHull, lowerHull, nextIndex));
 
+                if (leftTurn(getPos(state, activePoint), prevv, nextv)) {
+                    break;
+                }
+                triangles.push(new Triangle(getHullElement(upperHull, lowerHull, prevIndex), getHullElement(upperHull, lowerHull, nextIndex), activePoint))
+                prevIndex = nextIndex;
+            }
+        }
+
+        // add activePoint to hull
+        {
+            upperHull.push(activePoint)
+            
+            while (upperHull.length > 2) {
+                let v1 = getPos(state, upperHull[upperHull.length - 3]);
+                let v2 = getPos(state, upperHull[upperHull.length - 2]);
+                let v3 = getPos(state, upperHull[upperHull.length - 1]);
+        
+                if (rightTurn(v1, v2, v3)) {
+                    break;
+                } else {
+                    upperHull.splice(upperHull.length - 2, 1);
+                }
+            }
+
+
+            lowerHull.unshift(upperHull[upperHull.length - 1]);
+
+
+
+            while (lowerHull.length > 2) {
+                let v1 = getPos(state, lowerHull[lowerHull.length - 3]);
+                let v2 = getPos(state, lowerHull[lowerHull.length - 2]);
+                let v3 = getPos(state, lowerHull[lowerHull.length - 1]);
+        
+                if (rightTurn(v1, v2, v3)) {
+                    break;
+                } else {
+                    lowerHull.splice(lowerHull.length - 2, 1);
+                }
+
+            }
+
+            lowerHull.splice(0, 1)
+        }
     }
     
     state.triangleIndicies = new Uint32Array(triangles.length*3);
