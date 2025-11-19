@@ -98,25 +98,10 @@ const red = new Vector4(1, 0, 0, 1)
 const green = new Vector4(0, 0.5, 0, 1)
 const blue = new Vector4(0, 0, 0.5, 1)
 
-function getHullElement(upperHull, lowerHull, index) {
-
-    let len = upperHull.length + lowerHull.length;
-
-    index = (index + len) % len
-
-    if (index < upperHull.length) {
-        return upperHull[index]
-    }
-
-    let newIndex = index - upperHull.length;
-    return lowerHull[newIndex];
-}
-
 // https://www.desmos.com/calculator/3r1fajunz6
-function convexHull(state, sortedIndicies, upperHull, lowerHull) {
+function convexHull(state, sortedIndicies) {
 
-    upperHull.push(sortedIndicies[0])
-    upperHull.push(sortedIndicies[1])
+    let upperHull = [sortedIndicies[0], sortedIndicies[1]]
 
     for (let i = 2; i < sortedIndicies.length; ++i) {
 
@@ -135,8 +120,7 @@ function convexHull(state, sortedIndicies, upperHull, lowerHull) {
         }
     }
 
-    lowerHull.push(sortedIndicies[sortedIndicies.length - 1])
-    lowerHull.push(sortedIndicies[sortedIndicies.length - 2])
+    let lowerHull = [sortedIndicies[sortedIndicies.length - 1], sortedIndicies[sortedIndicies.length - 2]]
 
     for (let i = sortedIndicies.length - 2; i-- > 0;) {
 
@@ -160,7 +144,7 @@ function convexHull(state, sortedIndicies, upperHull, lowerHull) {
     lowerHull.splice(lowerHull.length - 1, 1)
     lowerHull.splice(0, 1)
 
-    return upperHull.concat(lowerHull);
+    return [upperHull.concat(lowerHull), upperHull.length - 1];
 }
 
 function getPos(state, id) {
@@ -173,154 +157,6 @@ class Triangle {
         this.i1 = i1;
         this.i2 = i2;
         this.i3 = i3;
-    }
-}
-
-
-function visibleRangeLeft(state, hull, activePoint) {
-    let av = getPos(state, activePoint);
-    
-    let start = 0;
-    let end = hull.length - 1;
-    let mid = Math.floor((start + end) / 2);
-
-    while (start != mid && end != mid) {
-        mid = Math.floor((start + end) / 2);
-        let next = (mid + 1) % hull.length;
-        let prev = (mid - 1 + hull.length) % hull.length;
-        
-        let midv = getPos(state, hull[mid]);
-
-        let prevv = getPos(state, hull[prev]);
-        let nextv = getPos(state, hull[next]);
-
-        let oprev = orient(av, midv, prevv);
-        let onext = orient(av, midv, nextv);
-
-        if (oprev < 0 && onext < 0) {
-            return mid
-        }
-
-        if (oprev > 0) {
-            end = (mid - 1 + hull.length) % hull.length 
-        } else if (onext > 0) {
-            start = (mid + 1) % hull.length ;
-        }
-    }
-
-    return mid % hull.length;
-}
-function visibleRangeRight(state, hull, activePoint) {
-    let av = getPos(state, activePoint);
-    
-    let start = 0;
-    let end = hull.length - 1;
-    let mid = Math.floor((start + end) / 2);
-
-    while (start != mid && end != mid) {
-        mid = Math.floor((start + end) / 2);
-        let next = (mid + 1) % hull.length;
-        let prev = (mid - 1 + hull.length) % hull.length;
-        
-        let midv = getPos(state, hull[mid]);
-
-        let prevv = getPos(state, hull[prev]);
-        let nextv = getPos(state, hull[next]);
-
-        let oprev = orient(av, midv, prevv);
-        let onext = orient(av, midv, nextv);
-
-        if (oprev > 0 && onext > 0) {
-            return mid
-        }
-
-        if (oprev < 0) {
-            end = (mid - 1 + hull.length) % hull.length 
-        } else if (onext < 0) {
-            start = (mid + 1) % hull.length ;
-        }
-    }
-
-    return mid % hull.length;
-}
-
-
-function TriangulateFan(state, triangles, visibleHull, activePoint) {
-
-    let prev = visibleHull[0];
-
-    for (let i = 1; i < visibleHull.length; ++i) {
-        let index = visibleHull[i];
-        triangles.push(new Triangle(prev, index, activePoint));
-        prev = index;
-    }
-
-}
-
-
-function TriangulateMonotone(state, triangles, visibleHull, activePoint) {
-
-    
-    let min = 0;
-    let max = 0;
-    
-    for (let i = 0; i < visibleHull.length; ++i) {
-        
-        let v = getPos(state, visibleHull[i]);
-        
-        if (v.y < getPos(state, visibleHull[min]).y) min = i;
-        if (v.y > getPos(state, visibleHull[max]).y) max = i;
-    }
-    
-    let isLeftChain = {};
-    let i = max;
-    while (i != min) {
-        isLeftChain[visibleHull[i]] = true;
-        i = (i + 1) % visibleHull.length;
-    }
-    isLeftChain[visibleHull[min]] = true;
-    
-    visibleHull.push(activePoint); 
-    // sort visibleHull decreasing according to y
-    visibleHull.sort(function (a, b) {
-        return getPos(state, b).y - getPos(state, a).y;
-    });
-
-    let stack = [visibleHull[0], visibleHull[1]]
-
-    for (let i = 2; i < visibleHull.length; ++i) {
-
-        let u = visibleHull[i];
-        let top = stack[stack.length - 1];
-
-        if (isLeftChain[u] == isLeftChain[top]) {
-            let prev = stack.pop();
-
-
-            while (stack.length != 0 && orient(top, prev, u) < 0)  {
-                let next = stack.pop();
-                triangles.push(new Triangle(prev, next, u));
-                prev = next;
-            }
-            stack.push(prev)
-            stack.push(u)
-
-        } else {
-
-            let prev = stack.pop();
-
-            while (stack.length != 0) {
-                let next = stack.pop();
-                triangles.push(new Triangle(prev, next, u));
-                prev = next;
-            }
-            // push u_i-1, u_i
-            stack.push(visibleHull[i - 1]);
-            stack.push(u);
-        }
-    }
-    while (stack.length != 0) {
-        stack.pop()
     }
 }
 
@@ -338,15 +174,19 @@ function update(state) {
 
     let triangles = [new Triangle(indicies[0], indicies[1], indicies[2])];
 
-    let upperHull = []
-    let lowerHull = []
+    let [hull, upperend] = convexHull(state, indicies.slice(0, 3))
 
-    convexHull(state, indicies.slice(0, 3), upperHull, lowerHull)
+    let maxHullXIndex = 0
+    for (let i = 0; i < hull.length; ++i) {
+        if (getPos(state, hull[maxHullXIndex]).x < getPos(state, hull[i]).x) {
+            maxHullXIndex = i;
+        }
+    }
 
 
     for (let i = 3; i < indicies.length; ++i) {
 
-        if (i == 9) break;
+        // if (i == 11) break;
 
         let activePoint = indicies[i];
 
@@ -354,73 +194,74 @@ function update(state) {
 
         // lower triangulation
         {
-            let prevIndex = upperHull.length - 1;
+            let prevIndex = upperend;
             while (true) {
-                let nextIndex = prevIndex + 1;
-                let prevv = getPos(state, getHullElement(upperHull, lowerHull, prevIndex));
-                let nextv = getPos(state, getHullElement(upperHull, lowerHull, nextIndex));
+                let nextIndex = (prevIndex + 1) % hull.length;
+                let prevv = getPos(state, hull[prevIndex]);
+                let nextv = getPos(state, hull[nextIndex]);
 
                 if (rightTurn(getPos(state, activePoint), prevv, nextv)) {
                     break;
                 }
-                triangles.push(new Triangle(getHullElement(upperHull, lowerHull, prevIndex), getHullElement(upperHull, lowerHull, nextIndex), activePoint))
+                triangles.push(new Triangle(hull[prevIndex], hull[nextIndex], activePoint))
                 prevIndex = nextIndex;
             }
         }
 
         // upper triangulation
         {
-            let prevIndex = upperHull.length - 1;
+            let prevIndex = upperend;
             while (true) {
-                let nextIndex = prevIndex - 1;
+                let nextIndex = (prevIndex - 1 + hull.length) % hull.length;
                 
-                let prevv = getPos(state, getHullElement(upperHull, lowerHull, prevIndex));
-                let nextv = getPos(state, getHullElement(upperHull, lowerHull, nextIndex));
+                let prevv = getPos(state, hull[prevIndex]);
+                let nextv = getPos(state, hull[nextIndex]);
 
                 if (leftTurn(getPos(state, activePoint), prevv, nextv)) {
                     break;
                 }
-                triangles.push(new Triangle(getHullElement(upperHull, lowerHull, prevIndex), getHullElement(upperHull, lowerHull, nextIndex), activePoint))
+                triangles.push(new Triangle(hull[prevIndex], hull[nextIndex], activePoint))
                 prevIndex = nextIndex;
             }
         }
 
+        [hull, upperend] = convexHull(state, indicies.slice(0, i+1))
         // add activePoint to hull
-        {
-            upperHull.push(activePoint)
+        // {
+        //     hull = [...hull.slice(0, maxHullXIndex+1), activePoint, ...hull.slice(maxHullXIndex+1)]
+        //     maxHullXIndex += 1;
+
+        //     while (hull.length > 2) {
+        //         let v1 = getPos(state, hull[((maxHullXIndex - 2 + hull.length) % hull.length)]);
+        //         let v2 = getPos(state, hull[((maxHullXIndex - 1 + hull.length) % hull.length)]);
+        //         let v3 = getPos(state, hull[maxHullXIndex]);
+        
+        //         if (rightTurn(v1, v2, v3)) {
+        //             break;
+        //         } else {
+        //             hull.splice(maxHullXIndex - 1, 1);
+        //             maxHullXIndex -= 1
+        //         }
+        //     }
+
+        //     // if (hull.length - maxHullXIndex > 3) {
+        //         while (hull.length > 2) {
+        //             let midid = (maxHullXIndex + 1) % hull.length;
+        //             let v1 = getPos(state, hull[maxHullXIndex]);
+        //             let v2 = getPos(state, hull[midid]);
+        //             let v3 = getPos(state, hull[(maxHullXIndex + 2) % hull.length]);
             
-            while (upperHull.length > 2) {
-                let v1 = getPos(state, upperHull[upperHull.length - 3]);
-                let v2 = getPos(state, upperHull[upperHull.length - 2]);
-                let v3 = getPos(state, upperHull[upperHull.length - 1]);
-        
-                if (rightTurn(v1, v2, v3)) {
-                    break;
-                } else {
-                    upperHull.splice(upperHull.length - 2, 1);
-                }
-            }
-
-
-            lowerHull.unshift(upperHull[upperHull.length - 1]);
-
-
-
-            while (lowerHull.length > 2) {
-                let v1 = getPos(state, lowerHull[lowerHull.length - 3]);
-                let v2 = getPos(state, lowerHull[lowerHull.length - 2]);
-                let v3 = getPos(state, lowerHull[lowerHull.length - 1]);
-        
-                if (rightTurn(v1, v2, v3)) {
-                    break;
-                } else {
-                    lowerHull.splice(lowerHull.length - 2, 1);
-                }
-
-            }
-
-            lowerHull.splice(0, 1)
-        }
+        //             if (rightTurn(v1, v2, v3)) {
+        //                 break;
+        //             } else {
+        //                 if (midid < maxHullXIndex) {
+        //                     maxHullXIndex -= 1;
+        //                 }
+        //                 hull.splice(midid, 1);
+        //             }
+        //         }
+        //     // }
+        // }
     }
     
     state.triangleIndicies = new Uint32Array(triangles.length*3);
@@ -430,6 +271,21 @@ function update(state) {
         state.triangleIndicies[3*i+1] = triangles[i].i2;
         state.triangleIndicies[3*i+2] = triangles[i].i3;
     }
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
 }
 
 
@@ -506,14 +362,35 @@ let vals = [
     573.4647827148438, 334.282958984375,
 ]
 
+let vals2 = [
+    60.259681701660156, 519.7130126953125,
+    64.78961944580078, 163.75399780273438,
+    113.30943298339844, 315.23046875,
+    154.3426055908203, 210.44459533691406,
+    189.14710998535156, 344.9160461425781,
+    195.6725616455078, 323.6569519042969,
+    294.4981384277344, 453.55743408203125,
+    324.65576171875, 507.5606994628906,
+    379.419677734375, 317.37664794921875,
+    416.2752685546875, 531.3651123046875,
+    514.184326171875, 198.9794158935547,
+    516.9070434570312, 464.14007568359375,
+    566.7092895507812, 135.54026794433594,
+    578.7708129882812, 548.740966796875,
+    630.273193359375, 206.235595703125,
+    646.0303344726562, 356.9063720703125,
+    664.8704223632812, 248.46807861328125,
+    739.01123046875, 160.85406494140625,
+]
+
 let counter = 0
 function getRandom(minval, maxval) {
-    return vals[counter++];
+    // return vals2[counter++];
     return minval + Math.random() * (maxval - minval);
 }
 
 function getRandomInt(minval, maxval) {
-    return vals.length/2;
+    // return vals2.length/2;
     return Math.round(getRandom(minval, maxval));
 }
 
@@ -554,6 +431,8 @@ function resetState(state) {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
     gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
+
+    update(state)
 }
 
 const pointvert =`#version 300 es
@@ -646,7 +525,6 @@ function init() {
     gl.enableVertexAttribArray(0);
 
     resetState(state);
-    update(state)
     draw(state)
 }
 
