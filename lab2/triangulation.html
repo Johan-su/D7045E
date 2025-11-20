@@ -186,6 +186,18 @@ class Edge {
     }
 }
 
+function arraysEqual(a, b) {
+    if (a === b) return true;
+    if (a == null || b == null) return false;
+    if (a.length !== b.length) return false;
+
+
+    for (var i = 0; i < a.length; ++i) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
 
 function update(state) {
 
@@ -203,17 +215,10 @@ function update(state) {
 
     let [hull, upperend] = convexHull(state, indicies.slice(0, 3))
 
-    let maxHullXIndex = 0
-    for (let i = 0; i < hull.length; ++i) {
-        if (getPos(state, hull[maxHullXIndex]).x < getPos(state, hull[i]).x) {
-            maxHullXIndex = i;
-        }
-    }
-
 
     for (let i = 3; i < indicies.length; ++i) {
 
-        // if (i == 11) break;
+        if (i == 8) break;
 
         let activePoint = indicies[i];
 
@@ -252,43 +257,50 @@ function update(state) {
             }
         }
 
-        [hull, upperend] = convexHull(state, indicies.slice(0, i+1))
         // add activePoint to hull
-        // {
-        //     hull = [...hull.slice(0, maxHullXIndex+1), activePoint, ...hull.slice(maxHullXIndex+1)]
-        //     maxHullXIndex += 1;
+        {
+            let [cheathull, cheatupperend] = convexHull(state, indicies.slice(0, i+1))
 
-        //     while (hull.length > 2) {
-        //         let v1 = getPos(state, hull[((maxHullXIndex - 2 + hull.length) % hull.length)]);
-        //         let v2 = getPos(state, hull[((maxHullXIndex - 1 + hull.length) % hull.length)]);
-        //         let v3 = getPos(state, hull[maxHullXIndex]);
+            hull = [...hull.slice(0, upperend+1), activePoint, ...hull.slice(upperend+1)]
+            upperend += 1;
+
+            let removed = []
+
+            while (hull.length > 2) {
+                let v1 = getPos(state, hull[((upperend - 2 + hull.length) % hull.length)]);
+                let v2 = getPos(state, hull[((upperend - 1 + hull.length) % hull.length)]);
+                let v3 = getPos(state, hull[upperend]);
         
-        //         if (rightTurn(v1, v2, v3)) {
-        //             break;
-        //         } else {
-        //             hull.splice(maxHullXIndex - 1, 1);
-        //             maxHullXIndex -= 1
-        //         }
-        //     }
+                if (rightTurn(v1, v2, v3)) {
+                    break;
+                } else {
+                    removed.push(hull[upperend - 1]);
+                    hull.splice(upperend - 1, 1);
+                    upperend -= 1
+                }
+            }
 
-        //     // if (hull.length - maxHullXIndex > 3) {
-        //         while (hull.length > 2) {
-        //             let midid = (maxHullXIndex + 1) % hull.length;
-        //             let v1 = getPos(state, hull[maxHullXIndex]);
-        //             let v2 = getPos(state, hull[midid]);
-        //             let v3 = getPos(state, hull[(maxHullXIndex + 2) % hull.length]);
+            // if (hull.length - upperend > 3) {
+                while (hull.length > 2) {
+                    let midid = (upperend + 1) % hull.length;
+                    let v1 = getPos(state, hull[upperend]);
+                    let v2 = getPos(state, hull[midid]);
+                    let v3 = getPos(state, hull[(upperend + 2) % hull.length]);
             
-        //             if (rightTurn(v1, v2, v3)) {
-        //                 break;
-        //             } else {
-        //                 if (midid < maxHullXIndex) {
-        //                     maxHullXIndex -= 1;
-        //                 }
-        //                 hull.splice(midid, 1);
-        //             }
-        //         }
-        //     // }
-        // }
+                    if (rightTurn(v1, v2, v3)) {
+                        break;
+                    } else {
+                        if (midid < upperend) {
+                            upperend -= 1;
+                        }
+                        hull.splice(midid, 1);
+                    }
+                }
+            // }
+            assert(arraysEqual(hull, cheathull));
+            assert(upperend == cheatupperend);
+        }
+
     }
     
     state.triangleIndicies = new Uint32Array(state.triangles.length*3);
@@ -328,7 +340,6 @@ function update(state) {
         }
     });
     
-    console.log(state.edges)
     for (let i = 0; i < state.edges.length - 1; ++i) {
         let e1 = state.edges[i];
         let e2 = state.edges[i+1];
@@ -489,35 +500,35 @@ let vals = [
     573.4647827148438, 334.282958984375,
 ]
 
-let vals2 = [
-    60.259681701660156, 519.7130126953125,
-    64.78961944580078, 163.75399780273438,
-    113.30943298339844, 315.23046875,
-    154.3426055908203, 210.44459533691406,
-    189.14710998535156, 344.9160461425781,
-    195.6725616455078, 323.6569519042969,
-    294.4981384277344, 453.55743408203125,
-    324.65576171875, 507.5606994628906,
-    379.419677734375, 317.37664794921875,
-    416.2752685546875, 531.3651123046875,
-    514.184326171875, 198.9794158935547,
-    516.9070434570312, 464.14007568359375,
-    566.7092895507812, 135.54026794433594,
-    578.7708129882812, 548.740966796875,
-    630.273193359375, 206.235595703125,
-    646.0303344726562, 356.9063720703125,
-    664.8704223632812, 248.46807861328125,
-    739.01123046875, 160.85406494140625,
-]
+// let vals = [
+//     60.259681701660156, 519.7130126953125,
+//     64.78961944580078, 163.75399780273438,
+//     113.30943298339844, 315.23046875,
+//     154.3426055908203, 210.44459533691406,
+//     189.14710998535156, 344.9160461425781,
+//     195.6725616455078, 323.6569519042969,
+//     294.4981384277344, 453.55743408203125,
+//     324.65576171875, 507.5606994628906,
+//     379.419677734375, 317.37664794921875,
+//     416.2752685546875, 531.3651123046875,
+//     514.184326171875, 198.9794158935547,
+//     516.9070434570312, 464.14007568359375,
+//     566.7092895507812, 135.54026794433594,
+//     578.7708129882812, 548.740966796875,
+//     630.273193359375, 206.235595703125,
+//     646.0303344726562, 356.9063720703125,
+//     664.8704223632812, 248.46807861328125,
+//     739.01123046875, 160.85406494140625,
+// ]
 
 let counter = 0
 function getRandom(minval, maxval) {
-    // return vals2[counter++];
+    return vals[counter++];
     return minval + Math.random() * (maxval - minval);
 }
 
 function getRandomInt(minval, maxval) {
-    // return vals2.length/2;
+    return vals.length/2;
     return Math.round(getRandom(minval, maxval));
 }
 
@@ -572,7 +583,6 @@ function resetState(state) {
         state.pointCoords[2*i] = getRandom(offset, canvas.width - offset);
         state.pointCoords[2*i+1] = getRandom(offset, canvas.height - offset);
     }
-    console.log(state.pointCoords)
 
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
     gl.bufferData(gl.ARRAY_BUFFER, state.pointCoords, gl.STREAM_DRAW);
