@@ -90,13 +90,15 @@ function leftTurn(v1, v2, v3) {
     return orient(v1, v2, v3) > 0;
 }
 
-
-const black = new Vector4(0, 0, 0, 1)
-const gray = new Vector4(0.4, 0.4, 0.4, 1)
-const gold = new Vector4(1, 215/255, 0, 1)
-const red = new Vector4(1, 0, 0, 1)
-const green = new Vector4(0, 0.5, 0, 1)
-const blue = new Vector4(0, 0, 0.5, 1)
+const white = new Vector4(1, 1, 1, 1);
+const lightgray = new Vector4(0.1, 0.1, 0.1, 1);
+const black = new Vector4(0, 0, 0, 1);
+const gray = new Vector4(0.4, 0.4, 0.4, 1);
+const gold = new Vector4(1, 215/255, 0, 1);
+const red = new Vector4(1, 0, 0, 1);
+const green = new Vector4(0, 0.5, 0, 1);
+const blue = new Vector4(0, 0, 0.5, 1);
+const yellow = new Vector4(1, 1, 0, 1);
 
 // https://www.desmos.com/calculator/3r1fajunz6
 function convexHull(state, sortedIndicies) {
@@ -153,12 +155,37 @@ function getPos(state, id) {
 
 
 class Triangle {
-    constructor(i1, i2, i3) {
-        this.i1 = i1;
-        this.i2 = i2;
-        this.i3 = i3;
+    constructor(pointIndices) {
+        assert(pointIndices.length == 3);
+        this.pointIndices = pointIndices
+        this.tris = []
+        this.color = null;
     }
 }
+
+class Edge {
+    constructor(v1, v2, triangle) {
+
+        if (v1.x < v2.x) {
+            this.xmin = v1.x;
+            this.xmax = v2.x;
+        } else {
+            this.xmax = v1.x;
+            this.xmin = v2.x;
+        }
+
+        if (v1.y < v2.y) {
+            this.ymin = v1.y;
+            this.ymax = v2.y;
+        } else {
+            this.ymax = v1.y;
+            this.ymin = v2.y;
+        }
+
+        this.triangle = triangle;
+    }
+}
+
 
 function update(state) {
 
@@ -172,7 +199,7 @@ function update(state) {
     });
 
 
-    let triangles = [new Triangle(indicies[0], indicies[1], indicies[2])];
+    state.triangles = [new Triangle([indicies[0], indicies[1], indicies[2]])];
 
     let [hull, upperend] = convexHull(state, indicies.slice(0, 3))
 
@@ -203,7 +230,7 @@ function update(state) {
                 if (rightTurn(getPos(state, activePoint), prevv, nextv)) {
                     break;
                 }
-                triangles.push(new Triangle(hull[prevIndex], hull[nextIndex], activePoint))
+                state.triangles.push(new Triangle([hull[prevIndex], hull[nextIndex], activePoint]))
                 prevIndex = nextIndex;
             }
         }
@@ -220,7 +247,7 @@ function update(state) {
                 if (leftTurn(getPos(state, activePoint), prevv, nextv)) {
                     break;
                 }
-                triangles.push(new Triangle(hull[prevIndex], hull[nextIndex], activePoint))
+                state.triangles.push(new Triangle([hull[prevIndex], hull[nextIndex], activePoint]))
                 prevIndex = nextIndex;
             }
         }
@@ -264,34 +291,95 @@ function update(state) {
         // }
     }
     
-    state.triangleIndicies = new Uint32Array(triangles.length*3);
+    state.triangleIndicies = new Uint32Array(state.triangles.length*3);
 
-    for (let i = 0; i < triangles.length; ++i) {
-        state.triangleIndicies[3*i] = triangles[i].i1;
-        state.triangleIndicies[3*i+1] = triangles[i].i2;
-        state.triangleIndicies[3*i+2] = triangles[i].i3;
+
+
+    for (let i = 0; i < state.triangles.length; ++i) {
+        let tri = state.triangles[i];
+        for (let j = 0; j < tri.pointIndices.length; ++j) {
+            state.triangleIndicies[3*i+j] = tri.pointIndices[j];
+        }
     }
 
 
+    state.edges = []
+    for (let i = 0; i < state.triangles.length; ++i) {
 
+        let v1 = getPos(state, state.triangles[i].pointIndices[0]);
+        let v2 = getPos(state, state.triangles[i].pointIndices[1]);
+        let v3 = getPos(state, state.triangles[i].pointIndices[2]);
 
+        state.edges.push(new Edge(v1, v2, i))
+        state.edges.push(new Edge(v2, v3, i))
+        state.edges.push(new Edge(v3, v1, i))
 
+    }
 
-
+    state.edges.sort(function(a, b) {
+        if (a.xmin != b.xmin) {
+            return a.xmin - b.xmin;
+        } else if (a.xmax != b.xmax) {
+            return a.xmax - b.xmax;
+        } else if (a.ymin != b.ymin) {
+            return a.ymin - b.ymin;
+        } else {
+            return a.ymax - b.ymax;
+        }
+    });
     
-
-
-
-
+    console.log(state.edges)
+    for (let i = 0; i < state.edges.length - 1; ++i) {
+        let e1 = state.edges[i];
+        let e2 = state.edges[i+1];
+        
+        if (e1.xmin == e2.xmin && e1.xmax == e2.xmax && e1.ymin == e2.ymin && e1.ymax == e2.ymax) {
+            state.triangles[e1.triangle].tris.push(e2.triangle);
+            state.triangles[e2.triangle].tris.push(e1.triangle);
+        }
+    }
 
 
 
 }
 
+let possibleColors = [red, blue, green, yellow];
+
+function color4(state, triangleIndex) {
+    let t = state.triangles[triangleIndex]; 
+    if (t.color != null) {
+        return;
+    }
+
+    // select non chosen color
+    
+    let chosenColors = [];
+
+    for (let i = 0; i < t.tris.length; ++i) {
+        let tri = state.triangles[t.tris[i]];
+        if (tri.color != null) {
+            chosenColors.push(tri.color);
+        }
+    }
+
+    for (let i = 0; i < possibleColors.length; ++i) {
+        
+        if (!chosenColors.includes(possibleColors[i])) {
+            t.color = possibleColors[i];
+            break;
+        }
+    }
+
+    // deeper
+    for (let i = 0; i < t.tris.length; ++i) {
+        color4(state, t.tris[i]);
+    }
+}
+
 
 function draw(state) {
 
-    let background_color = gray
+    let background_color = lightgray;
 
     gl.clearColor(background_color.x, background_color.y, background_color.z, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -303,17 +391,56 @@ function draw(state) {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.gltriangleIndicies);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, state.triangleIndicies, gl.STREAM_DRAW)
 
-    
     gl.useProgram(state.triangleShader)
     gl.uniform1f(gl.getUniformLocation(state.triangleShader, "u_height"), canvas.height);
     gl.uniform1f(gl.getUniformLocation(state.triangleShader, "u_width"), canvas.width);
-    gl.uniform4f(gl.getUniformLocation(state.triangleShader, "u_color"), state.triangleColor.x, state.triangleColor.y, state.triangleColor.z, state.triangleColor.w);
-    gl.drawElements(gl.TRIANGLES, state.triangleIndicies.length, gl.UNSIGNED_INT, 0);
+
+    for (let i = 0; i < state.triangles.length; ++i) {
+        state.triangles[i].color = null;
+    }
+
+    switch (state.triangleColorType) {
+        case "monochrome": {
+            for (let i = 0; i < state.triangles.length; ++i) {
+                state.triangles[i].color = state.triangleColor;
+            }
+        } break;
+        case "distance": {
+            let p = new Vector2(50, 50);
+            for (let i = 0; i < state.triangles.length; ++i) {
+
+                let v1 = getPos(state, state.triangles[i].pointIndices[0]);
+                let v2 = getPos(state, state.triangles[i].pointIndices[1]);
+                let v3 = getPos(state, state.triangles[i].pointIndices[2]);
+
+                let mid = new Vector2((v1.x + v2.x + v3.x) / 3, (v1.y + v2.y + v3.y) / 3);
+                
+                let distance = Math.hypot(p.x - mid.x, p.y - mid.y) / canvas.width;
+
+                state.triangles[i].color = new Vector4(1-distance, 1-distance, 1-distance, 1);
+            }
+        } break;
+        case "4color": {
+            color4(state, 0);
+
+            for (let i = 0; i < state.triangles.length; ++i) {
+                assert(state.triangles[i].color != null);
+            }
+
+        } break;
+    }
+
+    for (let i = 0; i < state.triangleIndicies.length; i += 3) {
+        let color = state.triangles[i/3].color;
+        gl.uniform4f(gl.getUniformLocation(state.triangleShader, "u_color"), color.x, color.y, color.z, color.w);
+        gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_INT, i*4);
+    }
+
 
     gl.useProgram(state.pointShader)
     gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_height"), canvas.height);
     gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_width"), canvas.width);
-    gl.uniform4f(gl.getUniformLocation(state.pointShader, "u_color"), red.x, red.y, red.z, red.w);
+    gl.uniform4f(gl.getUniformLocation(state.pointShader, "u_color"), state.pointColor.x, state.pointColor.y, state.pointColor.z, state.pointColor.w);
     gl.drawArrays(gl.POINTS, 0, state.pointCount);
 
     gl.useProgram(state.lineShader)
@@ -403,6 +530,23 @@ function getColorfromstr(colorstr) {
     }
 }
 
+function setTriangleColoring(state, str) {
+    state.triangleColorType = "monochrome";
+    switch (str) {
+        case "red": state.triangleColor = red; break;
+        case "green": state.triangleColor = green; break;
+        case "blue": state.triangleColor = blue; break;
+        case "distance": {
+            state.triangleColor = null;
+            state.triangleColorType = "distance";
+        } break;
+        case "4color": {
+            state.triangleColor = null;
+            state.triangleColorType = "4color";
+        } break;
+    }
+}
+
 function resetState(state) {
 
     const minCount = 10;
@@ -417,8 +561,9 @@ function resetState(state) {
         case "min": state.pointCount = minCount; break;
         case "max": state.pointCount = maxCount; break;
     }
-    state.triangleColor = getColorfromstr(document.getElementById("trianglecolorChoice").value)
-    state.lineColor = getColorfromstr(document.getElementById("linecolorChoice").value)
+    setTriangleColoring(state, document.getElementById("trianglecolorChoice").value);
+    state.lineColor = getColorfromstr(document.getElementById("linecolorChoice").value);
+    state.pointColor = getColorfromstr(document.getElementById("pointcolorChoice").value);
 
     state.pointCoords = new Float32Array(2*state.pointCount)
 
@@ -459,6 +604,30 @@ const pointfrag =`#version 300 es
         o_color = u_color;
     }`;
 
+const linevert =`#version 300 es
+    layout(location = 0) in vec2 a_coords;
+
+    uniform float u_width;
+    uniform float u_height;
+    
+    void main() {
+        float x = -1.0 + 2.0*(a_coords.x / u_width);
+        float y = 1.0 - 2.0*(a_coords.y / u_height);
+        gl_Position = vec4(x, y, 0.0, 1.0);
+    }`;
+
+const linefrag =`#version 300 es
+    precision highp float;
+    
+    uniform vec4 u_color;
+ 
+    out vec4 o_color;
+    
+    void main() {
+        o_color = u_color;
+    }`;
+
+
 const trianglevert =`#version 300 es
     layout(location = 0) in vec2 a_coords;
 
@@ -475,7 +644,6 @@ const trianglefrag =`#version 300 es
     precision highp float;
     
     uniform vec4 u_color;
- 
     out vec4 o_color;
     
     void main() {
@@ -500,11 +668,16 @@ function init() {
         draw(state)
     };
     document.getElementById("trianglecolorChoice").onchange = function () {
-        state.triangleColor = getColorfromstr(document.getElementById("trianglecolorChoice").value)
+        setTriangleColoring(state, document.getElementById("trianglecolorChoice").value)
         draw(state)
     };
     document.getElementById("linecolorChoice").onchange = function () {
         state.lineColor = getColorfromstr(document.getElementById("linecolorChoice").value)
+        draw(state)
+    };
+
+    document.getElementById("pointcolorChoice").onchange = function () {
+        state.pointColor = getColorfromstr(document.getElementById("pointcolorChoice").value)
         draw(state)
     };
 
@@ -514,7 +687,7 @@ function init() {
 
     state.triangleShader = createShaderProgram(trianglevert, trianglefrag);
     state.pointShader = createShaderProgram(pointvert, pointfrag);
-    state.lineShader = createShaderProgram(trianglevert, trianglefrag);
+    state.lineShader = createShaderProgram(linevert, linefrag);
 
     state.gltriangleIndicies = gl.createBuffer();
     state.glLineIndicies = gl.createBuffer()
@@ -554,12 +727,24 @@ window.onload = init;  // Arrange for init() to be called after page has loaded.
             <option value="blue">Blue</option>
             <option value="red">Red</option>
             <option value="green">Green</option>
+            <option value="distance">Distance</option>
+            <option value="4color">4color</option>
+
         </select>
     </label>
     </label>
         <label>
         <b>Edge Color:</b>
         <select id="linecolorChoice">
+            <option value="red">Red</option>
+            <option value="green">Green</option>
+            <option value="blue">Blue</option>
+        </select>
+    </label>
+    </label>
+        <label>
+        <b>Point Color:</b>
+        <select id="pointcolorChoice">
             <option value="red">Red</option>
             <option value="green">Green</option>
             <option value="blue">Blue</option>
