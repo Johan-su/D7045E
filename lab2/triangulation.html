@@ -101,13 +101,12 @@ const blue = new Vector4(0, 0, 0.5, 1);
 const yellow = new Vector4(1, 1, 0, 1);
 
 // https://www.desmos.com/calculator/3r1fajunz6
-function convexHull(state, sortedIndicies) {
+function convexHull(state, start, end) {
+    let upperHull = [start, start+1];
 
-    let upperHull = [sortedIndicies[0], sortedIndicies[1]]
+    for (let i = 2; i < end; ++i) {
 
-    for (let i = 2; i < sortedIndicies.length; ++i) {
-
-        upperHull.push(sortedIndicies[i])
+        upperHull.push(i)
         
         while (upperHull.length > 2) {
             let v1 = getPos(state, upperHull[upperHull.length - 3]);
@@ -122,11 +121,11 @@ function convexHull(state, sortedIndicies) {
         }
     }
 
-    let lowerHull = [sortedIndicies[sortedIndicies.length - 1], sortedIndicies[sortedIndicies.length - 2]]
+    let lowerHull = [end - 1, end - 2];
 
-    for (let i = sortedIndicies.length - 2; i-- > 0;) {
+    for (let i = end - 2; i-- > 0;) {
 
-        lowerHull.push(sortedIndicies[i])
+        lowerHull.push(i)
 
         while (lowerHull.length > 2) {
             let v1 = getPos(state, lowerHull[lowerHull.length - 3]);
@@ -140,7 +139,6 @@ function convexHull(state, sortedIndicies) {
             }
 
         }
-
     }
 
     lowerHull.splice(lowerHull.length - 1, 1)
@@ -201,26 +199,16 @@ function arraysEqual(a, b) {
 
 function update(state) {
 
-    let indicies = new Uint32Array(state.pointCount);
-    for (let i = 0; i < state.pointCount; ++i) {
-        indicies[i] = i;
-    }
-    // sort indicies according to x
-    indicies.sort(function (a, b) {
-        return getPos(state, a).x - getPos(state, b).x;
-    });
+    state.triangles = [new Triangle([0, 1, 2])];
+
+    let [hull, upperend] = convexHull(state, 0, 3)
 
 
-    state.triangles = [new Triangle([indicies[0], indicies[1], indicies[2]])];
+    for (let i = 3; i < state.pointCount; ++i) {
 
-    let [hull, upperend] = convexHull(state, indicies.slice(0, 3))
+        // if (i == 9) break;
 
-
-    for (let i = 3; i < indicies.length; ++i) {
-
-        if (i == 8) break;
-
-        let activePoint = indicies[i];
+        let activePoint = i;
 
 
 
@@ -259,12 +247,12 @@ function update(state) {
 
         // add activePoint to hull
         {
-            let [cheathull, cheatupperend] = convexHull(state, indicies.slice(0, i+1))
+            // let [cheathull, cheatupperend] = convexHull(state, 0, i+1)
 
             hull = [...hull.slice(0, upperend+1), activePoint, ...hull.slice(upperend+1)]
             upperend += 1;
 
-            let removed = []
+            let removedId = null;
 
             while (hull.length > 2) {
                 let v1 = getPos(state, hull[((upperend - 2 + hull.length) % hull.length)]);
@@ -274,31 +262,35 @@ function update(state) {
                 if (rightTurn(v1, v2, v3)) {
                     break;
                 } else {
-                    removed.push(hull[upperend - 1]);
+                    if (removedId == null) {
+                        removedId = hull[upperend - 1];
+                    }
                     hull.splice(upperend - 1, 1);
                     upperend -= 1
                 }
             }
 
-            // if (hull.length - upperend > 3) {
-                while (hull.length > 2) {
-                    let midid = (upperend + 1) % hull.length;
-                    let v1 = getPos(state, hull[upperend]);
-                    let v2 = getPos(state, hull[midid]);
-                    let v3 = getPos(state, hull[(upperend + 2) % hull.length]);
-            
-                    if (rightTurn(v1, v2, v3)) {
-                        break;
-                    } else {
-                        if (midid < upperend) {
-                            upperend -= 1;
-                        }
-                        hull.splice(midid, 1);
+            if (removedId != null) {
+                hull = [...hull.slice(0, upperend+1), removedId, ...hull.slice(upperend+1)]
+            }
+
+            while (hull.length > 2) {
+                let midid = (upperend + 1) % hull.length;
+                let v1 = getPos(state, hull[upperend]);
+                let v2 = getPos(state, hull[midid]);
+                let v3 = getPos(state, hull[(upperend + 2) % hull.length]);
+        
+                if (rightTurn(v1, v2, v3)) {
+                    break;
+                } else {
+                    if (midid < upperend) {
+                        upperend -= 1;
                     }
+                    hull.splice(midid, 1);
                 }
-            // }
-            assert(arraysEqual(hull, cheathull));
-            assert(upperend == cheatupperend);
+            }
+            // assert(arraysEqual(hull, cheathull));
+            // assert(upperend == cheatupperend);
         }
 
     }
@@ -448,12 +440,6 @@ function draw(state) {
     }
 
 
-    gl.useProgram(state.pointShader)
-    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_height"), canvas.height);
-    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_width"), canvas.width);
-    gl.uniform4f(gl.getUniformLocation(state.pointShader, "u_color"), state.pointColor.x, state.pointColor.y, state.pointColor.z, state.pointColor.w);
-    gl.drawArrays(gl.POINTS, 0, state.pointCount);
-
     gl.useProgram(state.lineShader)
     gl.uniform1f(gl.getUniformLocation(state.lineShader, "u_height"), canvas.height);
     gl.uniform1f(gl.getUniformLocation(state.lineShader, "u_width"), canvas.width);
@@ -462,6 +448,13 @@ function draw(state) {
     for (let i = 0; i < state.triangleIndicies.length; i += 3) {
         gl.drawElements(gl.LINE_LOOP, 3, gl.UNSIGNED_INT, i*4);
     }
+
+    gl.useProgram(state.pointShader)
+    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_height"), canvas.height);
+    gl.uniform1f(gl.getUniformLocation(state.pointShader, "u_width"), canvas.width);
+    gl.uniform4f(gl.getUniformLocation(state.pointShader, "u_color"), state.pointColor.x, state.pointColor.y, state.pointColor.z, state.pointColor.w);
+    gl.drawArrays(gl.POINTS, 0, state.pointCount);
+
 }
 
 function createShaderProgram(vertexShaderSource, fragmentShaderSource) {
@@ -523,12 +516,12 @@ let vals = [
 
 let counter = 0
 function getRandom(minval, maxval) {
-    return vals[counter++];
+    // return vals[counter++];
     return minval + Math.random() * (maxval - minval);
 }
 
 function getRandomInt(minval, maxval) {
-    return vals.length/2;
+    // return vals.length/2;
     return Math.round(getRandom(minval, maxval));
 }
 
@@ -579,9 +572,17 @@ function resetState(state) {
     state.pointCoords = new Float32Array(2*state.pointCount)
 
     const offset = 50
+    let vecs = []
     for (let i = 0; i < state.pointCount; ++i) {
-        state.pointCoords[2*i] = getRandom(offset, canvas.width - offset);
-        state.pointCoords[2*i+1] = getRandom(offset, canvas.height - offset);
+        vecs.push(new Vector2(getRandom(offset, canvas.width - offset), getRandom(offset, canvas.height - offset)))
+    }
+    vecs.sort(function(a,b) {
+        return a.x - b.x;
+    });
+
+    for (let i = 0; i < vecs.length; ++i) {
+        state.pointCoords[2*i] = vecs[i].x;
+        state.pointCoords[2*i+1] = vecs[i].y;
     }
 
     gl.bindBuffer(gl.ARRAY_BUFFER, state.glCoords);
