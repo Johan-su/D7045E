@@ -531,7 +531,9 @@ function getColorfromstr(colorstr) {
         case "red": return red; break;
         case "green": return green; break;
         case "blue": return blue; break;
+        case "black" : return black; break;
     }
+    return white;
 }
 
 function setTriangleColoring(state, str) {
@@ -750,6 +752,7 @@ window.onload = init;  // Arrange for init() to be called after page has loaded.
             <option value="red">Red</option>
             <option value="green">Green</option>
             <option value="blue">Blue</option>
+            <option value="black">Black</option>
         </select>
     </label>
     </label>
@@ -759,6 +762,7 @@ window.onload = init;  // Arrange for init() to be called after page has loaded.
             <option value="red">Red</option>
             <option value="green">Green</option>
             <option value="blue">Blue</option>
+            <option value="black">Black</option>
         </select>
     </label>
 </p>
