@@ -17,7 +17,6 @@
 <meta charset="UTF-8">
 
 <script src="gl-matrix-min.js"></script>
-
 <script>
 "use strict";
 
@@ -39,7 +38,7 @@ class Mesh {
 
         this.ibo = gl.createBuffer()
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo)
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indicies, gl.STREAM_DRAW)
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STREAM_DRAW)
 
         gl.bindVertexArray(null)
         gl.bindBuffer(gl.ARRAY_BUFFER, null)
@@ -120,8 +119,8 @@ const monofrag =`#version 300 es
 
 class MonochromeMaterial extends Material {  
     constructor(color) {
+        super(new ShaderProgram(new Shader(monovert, gl.VERTEX_SHADER), new Shader(monofrag, gl.FRAGMENT_SHADER)))
         this.color = color
-        this.shaderProg = ShaderProgram(Shader(monovert, gl.VERTEX_SHADER), Shader(monofrag, gl.FRAGMENT_SHADER))
     }
     ApplyMaterial() {
         this.shaderProg.activate()
@@ -153,7 +152,7 @@ class Shader {
         this.shader = gl.createShader(type);
         gl.shaderSource(this.shader, shaderSource);
         gl.compileShader(this.shader);
-        if (!gl.getShaderParameter(vsh, gl.COMPILE_STATUS)) {
+        if (!gl.getShaderParameter(this.shader, gl.COMPILE_STATUS)) {
             throw new Error("Error in shader:  " + gl.getShaderInfoLog(this.shader));
         }
     }
@@ -291,6 +290,8 @@ function loop(state) {
 }
 
 
+
+
 function init() {
     try {canvas = document.getElementById("webglcanvas")}
     catch (e) {
@@ -309,15 +310,38 @@ function init() {
 
     let state = {};
 
-    state.monochrome = MonochromeMaterial(green)
-    state.meshCuboid = Cuboid(1, 1, 1)
+    state.monochrome = new MonochromeMaterial(green)
+    state.meshCuboid = new Cuboid(1, 1, 1)
 
 
-    let view = mat4.create()
+    let view = glMatrix.mat4.create()
     
 
-    state.camera = Camera()
+    state.camera = new Camera()
 
+    document.addEventListener("keydown", function doKey(evt) {
+        switch (evt.keyCode) {
+            case 'w': {
+                
+            } break;
+            case 'a': {
+
+            } break;
+            case 's': {
+
+            } break;
+            case 'd': {
+
+            } break;
+            case 'e': {
+
+            } break;
+            case 'c': {
+
+            } break;
+        }
+
+    }, false);
 
     loop(state);
 }
