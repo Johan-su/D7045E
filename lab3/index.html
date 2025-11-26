@@ -16,7 +16,7 @@
 <head>
 <meta charset="UTF-8">
 
-<script src="gl-matrix-min.js"></script>
+<script src="gl-matrix.js"></script>
 <script>
 "use strict";
 
@@ -27,18 +27,21 @@ let gl;  // The WebGL graphics context.
 
 class Mesh {
     constructor(verticies, indices) {
+        this.verticies = verticies
+        this.indices = indices
+
         this.vao = gl.createVertexArray()
         gl.bindVertexArray(this.vao)
 
         this.vbo = gl.createBuffer()
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo)
-        gl.bufferData(gl.ARRAY_BUFFER, verticies, gl.STREAM_DRAW)
+        gl.bufferData(gl.ARRAY_BUFFER, this.verticies, gl.STREAM_DRAW)
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
         gl.enableVertexAttribArray(0)
 
         this.ibo = gl.createBuffer()
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo)
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STREAM_DRAW)
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices, gl.STREAM_DRAW)
 
         gl.bindVertexArray(null)
         gl.bindBuffer(gl.ARRAY_BUFFER, null)
@@ -103,8 +106,10 @@ class Material {
 const monovert =`#version 300 es
     layout(location = 0) in vec4 a_coords;
 
+    uniform mat4 u_MVP;
+
     void main() {
-        gl_Position = a_coords;
+        gl_Position = u_MVP * a_coords;
     }`;
 
 const monofrag =`#version 300 es
@@ -114,7 +119,8 @@ const monofrag =`#version 300 es
     out vec4 o_color;
     
     void main() {
-        o_color = u_color;
+        float inv = 1.0 - gl_FragCoord.z;
+        o_color = vec4(u_color.xyz * 1.6 * inv, 1.0);
     }`;
 
 class MonochromeMaterial extends Material {  
@@ -124,7 +130,7 @@ class MonochromeMaterial extends Material {
     }
     ApplyMaterial() {
         this.shaderProg.activate()
-        gl.uniform4f(gl.getUniformLocation(this.shader, "u_color"), this.color.x, this.color.y, this.color.z, this.color.w)
+        gl.uniform4f(gl.getUniformLocation(this.shaderProg.get(), "u_color"), this.color.x, this.color.y, this.color.z, this.color.w)
     }
 }
 
@@ -135,10 +141,17 @@ class GraphicsNode {
         this.model = model
     }
 
-    draw() {
+    draw(camera) {
         gl.bindVertexArray(this.mesh.vao)
         this.material.ApplyMaterial()
-        gl.drawElements(gl.TRIANGLES, )
+        
+        let mvp = glMatrix.mat4.create()
+        glMatrix.mat4.copy(mvp, this.model)
+        glMatrix.mat4.mul(mvp, camera.view, mvp)
+        glMatrix.mat4.mul(mvp, camera.projection, mvp)
+
+        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp)
+        gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0)
     }
 
     update(transform) {
@@ -176,6 +189,9 @@ class ShaderProgram {
     }
     activate() {
         gl.useProgram(this.prog)
+    }
+    get() {
+        return this.prog
     }
 
 }
@@ -253,6 +269,7 @@ const gray = new Vector4(0.4, 0.4, 0.4, 1);
 const gold = new Vector4(1, 215/255, 0, 1);
 const red = new Vector4(1, 0, 0, 1);
 const green = new Vector4(0, 0.5, 0, 1);
+const purple = new Vector4(111/255, 63/255, 245/255, 1);
 const blue = new Vector4(0, 0, 0.5, 1);
 const yellow = new Vector4(1, 1, 0, 1);
 
@@ -283,22 +300,13 @@ function getRandomInt(minval, maxval) {
     return Math.round(getRandom(minval, maxval));
 }
 
-
-function loop(state) {
-
-    requestAnimationFrame(loop)
-}
-
-
-
-
 function init() {
     try {canvas = document.getElementById("webglcanvas")}
     catch (e) {
         console.log(e)
         return
     }
-    gl = canvas.getContext("webgl2", {alpha: false, depth: false});
+    gl = canvas.getContext("webgl2", {alpha: true, depth: true});
     if (!gl) {
         console.log("Browser does not support WebGL");
         return
@@ -307,43 +315,79 @@ function init() {
     console.log(gl.getParameter(gl.VERSION));
     console.log(gl.getParameter(gl.RENDERER));
     
+    gl.enable(gl.DEPTH_TEST)
+    gl.depthFunc(gl.LESS)
 
     let state = {};
+    state.camera = new Camera(glMatrix.mat4.create(), glMatrix.mat4.create())
+    // glMatrix.mat4.ortho(state.camera.projection, -100, 100, -100, 100, 100, -100)
 
-    state.monochrome = new MonochromeMaterial(green)
-    state.meshCuboid = new Cuboid(1, 1, 1)
+    glMatrix.mat4.perspective(state.camera.projection, Math.PI/2, canvas.width/canvas.height, 10, -100)
 
+    let greenmat = new MonochromeMaterial(green)
+    let purplemat = new MonochromeMaterial(purple)
+    let cubemesh = new Cuboid(1, 1, 1)
+    
+    state.nodes = []
+    state.nodes.push(new GraphicsNode(cubemesh, greenmat, glMatrix.mat4.fromValues(
+        8, 0, 0, 0,
+        0, 8, 0, 0,
+        0, 0, 8, 0,
+        0, 0, -50, 1,
+    )))
 
-    let view = glMatrix.mat4.create()
+    for (let i = 0; i < 30; ++i) {
+        state.nodes.push(new GraphicsNode(cubemesh, purplemat, glMatrix.mat4.fromValues(
+            8, 0, 0, 0,
+            0, 8, 0, 0,
+            0, 0, 8, 0,
+            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
+        )))
+    }
+
     
 
-    state.camera = new Camera()
+    let loop = function(time) {
 
-    document.addEventListener("keydown", function doKey(evt) {
-        switch (evt.keyCode) {
+        gl.clearColor(0.23, 0.23, 0.23, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        for (let i = 0; i < state.nodes.length; ++i) {
+            state.nodes[i].draw(state.camera)
+        }
+
+        requestAnimationFrame(loop)
+    }
+
+
+    document.addEventListener("keydown", function (evt) {
+        let vec = new Float32Array(3)
+
+        switch (evt.key) {
             case 'w': {
-                
+                vec[2] = -1
             } break;
             case 'a': {
-
+                vec[0] = -1
             } break;
             case 's': {
-
+                vec[2] = 1
             } break;
             case 'd': {
-
+                vec[0] = 1
             } break;
             case 'e': {
-
+                vec[1] = 1
             } break;
             case 'c': {
-
+                vec[1] = -1
             } break;
         }
 
-    }, false);
+        glMatrix.mat4.translate(state.nodes[0].model, state.nodes[0].model, vec)
+    });
 
-    loop(state);
+    loop();
 }
 
 
