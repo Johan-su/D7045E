@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+
+<!--
+   This page shows an animation of colored disks moving around
+   in a canvas, bouncing off the edges.  The program uses WebGL.
+   All of the points are drawn as single primitive of type POINTS.
+   The color is an attribute in the vertex shader, allowing
+   each point to be a different primitive.  The user can decide
+   whether to have randomly colored points or to make all the
+   points red.  The point size is a uniform variable, so all
+   the points are the same size.  However, the user can select
+   whether the size is large or small.
+-->
+
+<html>
+<head>
+<meta charset="UTF-8">
+
+<script src="gl-matrix.js"></script>
+<script>
+"use strict";
+
+
+let canvas;  // The canvas where WebGL draws.
+let gl;  // The WebGL graphics context.
+
+
+class Mesh {
+    constructor(verticies, indices) {
+        this.verticies = verticies
+        this.indices = indices
+
+        this.vao = gl.createVertexArray()
+        gl.bindVertexArray(this.vao)
+
+        this.vbo = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo)
+        gl.bufferData(gl.ARRAY_BUFFER, this.verticies, gl.STREAM_DRAW)
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
+        gl.enableVertexAttribArray(0)
+
+        this.ibo = gl.createBuffer()
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo)
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices, gl.STREAM_DRAW)
+
+        gl.bindVertexArray(null)
+        gl.bindBuffer(gl.ARRAY_BUFFER, null)
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null)
+    }
+}
+
+class Cuboid extends Mesh {
+    constructor(width, depth, height) {
+
+        let verticies = new Float32Array([
+            -width/2, -height/2, depth/2,
+            width/2, -height/2, depth/2,
+            width/2, height/2, depth/2,
+            -width/2, height/2, depth/2,
+
+            -width/2, -height/2, -depth/2,
+            width/2, -height/2, -depth/2,
+            width/2, height/2, -depth/2,
+            -width/2, height/2, -depth/2,
+        ])
+        let indicies = new Uint32Array([
+            // front
+            0, 1, 2,
+            2, 3, 0,
+
+            // top
+            3, 2, 6,
+            6, 7, 3,
+
+            // right
+            1, 5, 6,
+            6, 2, 1,
+
+            // left
+            4, 7, 3,
+            3, 0, 4,
+
+            // bottom
+            0, 1, 5,
+            5, 4, 0,
+
+            // back
+            5, 6, 7,
+            7, 4, 5,
+        ])
+
+        super(verticies, indicies)
+    }
+}
+
+class Sphere extends Mesh {
+    constructor() {
+
+        
+    }
+}
+
+class Torus extends Mesh {
+
+}
+
+class Cylinder extends Mesh {
+
+}
+
+class Cone extends Mesh {
+
+}
+
+class Material {
+    constructor(shaderProg) {
+        this.shaderProg = shaderProg
+    }
+
+    ApplyMaterial() {
+        assert(false && "base class ApplyMaterial was called")
+    }
+}
+
+const monovert =`#version 300 es
+    layout(location = 0) in vec4 a_coords;
+
+    uniform mat4 u_MVP;
+
+    void main() {
+        gl_Position = u_MVP * a_coords;
+    }`;
+
+const monofrag =`#version 300 es
+    precision highp float;
+    
+    uniform vec4 u_color;
+    out vec4 o_color;
+    
+    void main() {
+        float inv = 1.0 - gl_FragCoord.z;
+        o_color = vec4(u_color.xyz * 1.6 * inv, 1.0);
+    }`;
+
+class MonochromeMaterial extends Material {  
+    constructor(color) {
+        super(new ShaderProgram(new Shader(monovert, gl.VERTEX_SHADER), new Shader(monofrag, gl.FRAGMENT_SHADER)))
+        this.color = color
+    }
+    ApplyMaterial() {
+        this.shaderProg.activate()
+        gl.uniform4f(gl.getUniformLocation(this.shaderProg.get(), "u_color"), this.color.x, this.color.y, this.color.z, this.color.w)
+    }
+}
+
+class GraphicsNode {
+    constructor(mesh, material, model) {
+        this.mesh = mesh
+        this.material = material
+        this.model = model
+    }
+
+    draw(camera) {
+        gl.bindVertexArray(this.mesh.vao)
+        this.material.ApplyMaterial()
+        
+        let mvp = glMatrix.mat4.create()
+        glMatrix.mat4.copy(mvp, this.model)
+        glMatrix.mat4.mul(mvp, camera.view, mvp)
+        glMatrix.mat4.mul(mvp, camera.projection, mvp)
+
+        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp)
+        gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0)
+    }
+
+    update(transform) {
+        this.model = transform * this.model
+    }
+}
+
+class Shader {
+    constructor(shaderSource, type) {
+        this.type = type
+        this.shader = gl.createShader(type);
+        gl.shaderSource(this.shader, shaderSource);
+        gl.compileShader(this.shader);
+        if (!gl.getShaderParameter(this.shader, gl.COMPILE_STATUS)) {
+            throw new Error("Error in shader:  " + gl.getShaderInfoLog(this.shader));
+        }
+    }
+    get() {
+        return this.shader
+    }
+    getType() {
+        return this.type
+    }
+}
+
+class ShaderProgram {
+    constructor(vertShader, fragShader) {
+        this.prog = gl.createProgram();
+        gl.attachShader(this.prog, vertShader.get());
+        gl.attachShader(this.prog, fragShader.get());
+        gl.linkProgram(this.prog);
+        if (!gl.getProgramParameter(this.prog, gl.LINK_STATUS)) {
+            throw new Error("Link error in program:  " + gl.getProgramInfoLog(this.prog));
+        }
+    }
+    activate() {
+        gl.useProgram(this.prog)
+    }
+    get() {
+        return this.prog
+    }
+
+}
+
+class Camera {
+    constructor(view, projection) {
+        this.view = view
+        this.projection = projection
+    }
+}
+
+
+class Vector2 {
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+}
+
+function dot(v1, v2) {
+    return v1.x*v2.x + v1.y*v2.y
+}
+
+function sub(v1, v2) {
+    return new Vector2(v1.x - v2.x, v1.y - v2.y)
+}
+
+function add(v1, v2) {
+    return new Vector2(v1.x + v2.x, v1.y + v2.y)
+}
+
+function mul(v, s) {
+    return new Vector2(v.x*s, v.y*s)
+}
+
+function div(v, s) {
+    return new Vector2(v.x/s, v.y/s)
+}
+
+function assert(condition) {
+    if (!condition) {
+        throw "Assertion failed";
+    }
+}
+
+class Vector4 {
+    constructor(x, y, z, w) {
+        this.x = x
+        this.y = y
+        this.z = z
+        this.w = w
+    }
+}
+
+
+// < 0 right turn
+// > 0 left turn
+function orient(v1, v2, v3) {
+    let v = (v3.y - v1.y)*(v2.x - v1.x) - (v3.x - v1.x)*(v2.y - v1.y);
+    return -v; // -v because y coordinate is flipped in webgl
+}
+
+function rightTurn(v1, v2, v3) {
+    return orient(v1, v2, v3) < 0;
+}
+
+function leftTurn(v1, v2, v3) {
+    return orient(v1, v2, v3) > 0;
+}
+
+const white = new Vector4(1, 1, 1, 1);
+const lightgray = new Vector4(0.1, 0.1, 0.1, 1);
+const black = new Vector4(0, 0, 0, 1);
+const gray = new Vector4(0.4, 0.4, 0.4, 1);
+const gold = new Vector4(1, 215/255, 0, 1);
+const red = new Vector4(1, 0, 0, 1);
+const green = new Vector4(0, 0.5, 0, 1);
+const purple = new Vector4(111/255, 63/255, 245/255, 1);
+const blue = new Vector4(0, 0, 0.5, 1);
+const yellow = new Vector4(1, 1, 0, 1);
+
+function getPos(state, id) {
+    return new Vector2(state.pointCoords[2*id], state.pointCoords[2*id+1])
+}
+
+
+function arraysEqual(a, b) {
+    if (a === b) return true;
+    if (a == null || b == null) return false;
+    if (a.length !== b.length) return false;
+
+
+    for (var i = 0; i < a.length; ++i) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+function getRandom(minval, maxval) {
+    // return vals[counter++];
+    return minval + Math.random() * (maxval - minval);
+}
+
+function getRandomInt(minval, maxval) {
+    // return vals.length/2;
+    return Math.round(getRandom(minval, maxval));
+}
+
+function init() {
+    try {canvas = document.getElementById("webglcanvas")}
+    catch (e) {
+        console.log(e)
+        return
+    }
+    gl = canvas.getContext("webgl2", {alpha: true, depth: true});
+    if (!gl) {
+        console.log("Browser does not support WebGL");
+        return
+    }
+    console.log(gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    console.log(gl.getParameter(gl.VERSION));
+    console.log(gl.getParameter(gl.RENDERER));
+    
+    gl.enable(gl.DEPTH_TEST)
+    gl.depthFunc(gl.LESS)
+
+    let state = {};
+    state.camera = new Camera(glMatrix.mat4.create(), glMatrix.mat4.create())
+    // glMatrix.mat4.ortho(state.camera.projection, -100, 100, -100, 100, 100, -100)
+
+    glMatrix.mat4.perspective(state.camera.projection, Math.PI/2, canvas.width/canvas.height, 10, -100)
+
+    let greenmat = new MonochromeMaterial(green)
+    let purplemat = new MonochromeMaterial(purple)
+    let cubemesh = new Cuboid(1, 1, 1)
+    
+    state.nodes = []
+    state.nodes.push(new GraphicsNode(cubemesh, greenmat, glMatrix.mat4.fromValues(
+        8, 0, 0, 0,
+        0, 8, 0, 0,
+        0, 0, 8, 0,
+        0, 0, -50, 1,
+    )))
+
+    for (let i = 0; i < 30; ++i) {
+        state.nodes.push(new GraphicsNode(cubemesh, purplemat, glMatrix.mat4.fromValues(
+            8, 0, 0, 0,
+            0, 8, 0, 0,
+            0, 0, 8, 0,
+            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
+        )))
+    }
+
+    
+
+    let loop = function(time) {
+
+        gl.clearColor(0.23, 0.23, 0.23, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        for (let i = 0; i < state.nodes.length; ++i) {
+            state.nodes[i].draw(state.camera)
+        }
+
+        requestAnimationFrame(loop)
+    }
+
+
+    document.addEventListener("keydown", function (evt) {
+        let vec = new Float32Array(3)
+
+        switch (evt.key) {
+            case 'w': {
+                vec[2] = -1
+            } break;
+            case 'a': {
+                vec[0] = -1
+            } break;
+            case 's': {
+                vec[2] = 1
+            } break;
+            case 'd': {
+                vec[0] = 1
+            } break;
+            case 'e': {
+                vec[1] = 1
+            } break;
+            case 'c': {
+                vec[1] = -1
+            } break;
+        }
+
+        glMatrix.mat4.translate(state.nodes[0].model, state.nodes[0].model, vec)
+    });
+
+    loop();
+}
+
+
+window.onload = init;  // Arrange for init() to be called after page has loaded.
+
+</script>
+</head>
+<body>
+
+<noscript><p><b>Sorry, but this page requires JavaScript.</b></p></noscript>
+
+<div id="canvas-holder">
+<canvas id="webglcanvas" width="1366" height="768"></canvas>
+</div>
+
+</body>
+</html>
