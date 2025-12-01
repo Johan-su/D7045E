@@ -63,7 +63,7 @@ class Cuboid extends Mesh {
             width/2, height/2, -depth/2,
             -width/2, height/2, -depth/2,
         ])
-        let indicies = new Uint32Array([
+        let indices = new Uint32Array([
             // front
             0, 1, 2,
             2, 3, 0,
@@ -89,14 +89,59 @@ class Cuboid extends Mesh {
             7, 4, 5,
         ])
 
-        super(verticies, indicies)
+        super(verticies, indices)
     }
 }
 
-class Sphere extends Mesh {
-    constructor() {
 
+// https://medium.com/@oscarsc/four-ways-to-create-a-mesh-for-a-sphere-d7956b825db4
+class Sphere extends Mesh {
+    constructor(parallelCount, meridianCount) {
         
+        let r = 0.5
+        
+        let verticies = [0, r, 0]
+        let indices = []
+
+
+        for (let i = 0; i < parallelCount; ++i) {
+            let parallel = Math.PI * (i + 1) / parallelCount;
+
+            let circler = r*Math.sin(parallel);
+            // 0 -> 0, pi/2 -> r, pi -> 0
+            let y = r*Math.cos(parallel);
+
+
+
+            for (let j = 0; j < meridianCount; ++j) {
+                let meridian = 2 * Math.PI * j / meridianCount;
+
+                let x = circler*Math.cos(meridian);
+                let z = circler*Math.sin(meridian);
+
+                verticies.push(x, y, z)
+
+                if (j != 0) {
+                    if (i == 0) {
+                        indices.push(0, i*meridianCount + j, i*meridianCount + j + 1)
+    
+                    } else if (i == parallelCount - 1) {
+    
+                        let last = 1 + parallelCount * meridianCount + 1;
+    
+                        indices.push(last, i*meridianCount + j, i*meridianCount + j + 1)
+    
+                    } else {
+                        indices.push(i*meridianCount + j, i*meridianCount + j + 1, i*(meridianCount- 1) + j + 1)
+                        indices.push(i*(meridianCount - 1) + j + 1, i*(meridianCount - 1) + j, i*meridianCount + j)
+                    }
+                }
+            }
+        }
+
+        verticies.push(0, -r, 0)
+
+        super(new Float32Array(verticies), new Float32Array(indices))  
     }
 }
 
