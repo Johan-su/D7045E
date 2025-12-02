@@ -26,8 +26,8 @@ let gl;  // The WebGL graphics context.
 
 
 class Mesh {
-    constructor(verticies, indices) {
-        this.verticies = verticies
+    constructor(vertices, indices) {
+        this.vertices = vertices
         this.indices = indices
 
         this.vao = gl.createVertexArray()
@@ -35,7 +35,7 @@ class Mesh {
 
         this.vbo = gl.createBuffer()
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo)
-        gl.bufferData(gl.ARRAY_BUFFER, this.verticies, gl.STREAM_DRAW)
+        gl.bufferData(gl.ARRAY_BUFFER, this.vertices, gl.STREAM_DRAW)
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
         gl.enableVertexAttribArray(0)
 
@@ -52,7 +52,7 @@ class Mesh {
 class Cuboid extends Mesh {
     constructor(width, depth, height) {
 
-        let verticies = new Float32Array([
+        let vertices = new Float32Array([
             -width/2, -height/2, depth/2,
             width/2, -height/2, depth/2,
             width/2, height/2, depth/2,
@@ -63,7 +63,7 @@ class Cuboid extends Mesh {
             width/2, height/2, -depth/2,
             -width/2, height/2, -depth/2,
         ])
-        let indicies = new Uint32Array([
+        let indices = new Uint32Array([
             // front
             0, 1, 2,
             2, 3, 0,
@@ -89,7 +89,7 @@ class Cuboid extends Mesh {
             7, 4, 5,
         ])
 
-        super(verticies, indicies)
+        super(vertices, indices)
     }
 }
 
