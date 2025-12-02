@@ -26,8 +26,8 @@ let gl;  // The WebGL graphics context.
 
 
 class Mesh {
-    constructor(verticies, indices) {
-        this.verticies = verticies
+    constructor(vertices, indices) {
+        this.vertices = vertices
         this.indices = indices
 
         this.vao = gl.createVertexArray()
@@ -35,7 +35,7 @@ class Mesh {
 
         this.vbo = gl.createBuffer()
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo)
-        gl.bufferData(gl.ARRAY_BUFFER, this.verticies, gl.STREAM_DRAW)
+        gl.bufferData(gl.ARRAY_BUFFER, this.vertices, gl.STREAM_DRAW)
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
         gl.enableVertexAttribArray(0)
 
@@ -52,7 +52,7 @@ class Mesh {
 class Cuboid extends Mesh {
     constructor(width, depth, height) {
 
-        let verticies = new Float32Array([
+        let vertices = new Float32Array([
             -width/2, -height/2, depth/2,
             width/2, -height/2, depth/2,
             width/2, height/2, depth/2,
@@ -89,7 +89,7 @@ class Cuboid extends Mesh {
             7, 4, 5,
         ])
 
-        super(verticies, indices)
+        super(vertices, indices)
     }
 }
 
@@ -100,16 +100,22 @@ class Sphere extends Mesh {
         
         let r = 0.5
         
-        let verticies = [0, r, 0]
+        let vertices = []
         let indices = []
+
+        let northvertexindex = parallelCount * meridianCount;
+        let southvertexindex = northvertexindex + 1;
 
 
         for (let i = 0; i < parallelCount; ++i) {
-            let parallel = Math.PI * (i + 1) / parallelCount;
+            let parallel = Math.PI * (i + 1) / (parallelCount + 1);
 
-            let circler = r*Math.sin(parallel);
             // 0 -> 0, pi/2 -> r, pi -> 0
+            let circler = r*Math.sin(parallel);
             let y = r*Math.cos(parallel);
+
+            let botring = i*meridianCount;
+            let topring = (i - 1)*(meridianCount);
 
 
 
@@ -119,29 +125,26 @@ class Sphere extends Mesh {
                 let x = circler*Math.cos(meridian);
                 let z = circler*Math.sin(meridian);
 
-                verticies.push(x, y, z)
+                vertices.push(x, y, z)
 
-                if (j != 0) {
-                    if (i == 0) {
-                        indices.push(0, i*meridianCount + j, i*meridianCount + j + 1)
-    
-                    } else if (i == parallelCount - 1) {
-    
-                        let last = 1 + parallelCount * meridianCount + 1;
-    
-                        indices.push(last, i*meridianCount + j, i*meridianCount + j + 1)
-    
-                    } else {
-                        indices.push(i*meridianCount + j, i*meridianCount + j + 1, i*(meridianCount- 1) + j + 1)
-                        indices.push(i*(meridianCount - 1) + j + 1, i*(meridianCount - 1) + j, i*meridianCount + j)
+                let nextj = (j + 1) % meridianCount;
+
+                if (i == 0) {
+                    indices.push(northvertexindex, botring + j, botring + nextj)
+                
+                } else {
+                    if (i == parallelCount - 1) {
+                        indices.push(southvertexindex, botring + j, botring + nextj)
                     }
+                    indices.push(botring + j, botring + nextj, topring + nextj)
+                    indices.push(topring + nextj, topring + j, botring + j)
                 }
             }
         }
 
-        verticies.push(0, -r, 0)
+        vertices.push(0, r, 0, 0, -r, 0)
 
-        super(new Float32Array(verticies), new Float32Array(indices))  
+        super(new Float32Array(vertices), new Uint32Array(indices))  
     }
 }
 
@@ -390,14 +393,15 @@ function init() {
 
     let greenmat = new MonochromeMaterial(green)
     let purplemat = new MonochromeMaterial(purple)
+    let spheremesh = new Sphere(10, 10)
     let cubemesh = new Cuboid(1, 1, 1)
     
     state.nodes = []
-    state.nodes.push(new GraphicsNode(cubemesh, greenmat, glMatrix.mat4.fromValues(
+    state.nodes.push(new GraphicsNode(spheremesh, greenmat, glMatrix.mat4.fromValues(
         8, 0, 0, 0,
         0, 8, 0, 0,
         0, 0, 8, 0,
-        0, 0, -50, 1,
+        0, 0, -10, 1,
     )))
 
     for (let i = 0; i < 30; ++i) {
