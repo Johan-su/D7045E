@@ -149,15 +149,130 @@ class Sphere extends Mesh {
 }
 
 class Torus extends Mesh {
+    constructor(revolveRadius, innerRadius, circleCount, verticesPerCircle) {
+        
+        let r = innerRadius + revolveRadius;
+        
+        let vertices = []
+        let indices = []
 
+
+        for (let i = 0; i < circleCount; ++i) {
+            let parallel = 2*Math.PI*i / (circleCount + 1);
+
+            
+        }
+
+
+        for (let i = 0; i < circleCount; ++i) {
+            let parallel = Math.PI * (i + 1) / (circleCount + 1);
+
+            // 0 -> 0, pi/2 -> r, pi -> 0
+            let circler = r*Math.sin(parallel);
+            let y = r*Math.cos(parallel);
+
+            let botring = i*verticesPerCircle;
+            let topring = (i - 1)*(verticesPerCircle);
+
+
+
+            for (let j = 0; j < verticesPerCircle; ++j) {
+                let meridian = 2 * Math.PI * j / verticesPerCircle;
+
+                let x = circler*Math.cos(meridian);
+                let z = circler*Math.sin(meridian);
+
+                vertices.push(x, y, z)
+
+                let nextj = (j + 1) % verticesPerCircle;
+
+                if (i == 0) {
+                    indices.push(northvertexindex, botring + j, botring + nextj)
+                
+                } else {
+                    if (i == circleCount - 1) {
+                        indices.push(southvertexindex, botring + j, botring + nextj)
+                    }
+                    indices.push(botring + j, botring + nextj, topring + nextj)
+                    indices.push(topring + nextj, topring + j, botring + j)
+                }
+            }
+        }
+
+        super(new Float32Array(vertices), new Uint32Array(indices))  
+    }
 }
 
 class Cylinder extends Mesh {
+    constructor(radius, length, parallelCount, meridianCount) {
+        
+        let r = radius;
+        
+        let vertices = []
+        let indices = []
 
+
+        for (let i = 0; i < parallelCount; ++i) {
+            let parallel = Math.PI * (i + 1) / (parallelCount + 1);
+
+            let y = length * i / parallelCount - length/2;
+
+            let botring = i*meridianCount;
+            let topring = (i - 1)*(meridianCount);
+
+
+
+            for (let j = 0; j < meridianCount; ++j) {
+                let meridian = 2 * Math.PI * j / meridianCount;
+
+                let x = r*Math.cos(meridian);
+                let z = r*Math.sin(meridian);
+
+                vertices.push(x, y, z)
+
+                let nextj = (j + 1) % meridianCount;
+
+                if (i != 0) {
+                    indices.push(botring + j, botring + nextj, topring + nextj)
+                    indices.push(topring + nextj, topring + j, botring + j)
+                }
+            }
+        }
+
+        super(new Float32Array(vertices), new Uint32Array(indices))  
+    }
 }
 
 class Cone extends Mesh {
+    constructor(meridianCount) {
+        
+        let r = 0.5
+        
+        let vertices = []
+        let indices = []
 
+        let topvertexindex = meridianCount;
+        
+        let y = -r;
+
+        for (let i = 0; i < meridianCount; ++i) {
+
+            let meridian = 2*Math.PI*i / (meridianCount + 1); 
+
+            let x = r*Math.cos(meridian);
+            let z = r*Math.sin(meridian);
+            
+            vertices.push(x, y, z);
+
+            let nexti = (i + 1) % meridianCount
+            indices.push(topvertexindex, i, nexti);
+        }
+
+
+        vertices.push(0, r, 0)
+
+        super(new Float32Array(vertices), new Uint32Array(indices))  
+    }
 }
 
 class Material {
@@ -270,34 +385,6 @@ class Camera {
     }
 }
 
-
-class Vector2 {
-    constructor(x, y) {
-        this.x = x
-        this.y = y
-    }
-}
-
-function dot(v1, v2) {
-    return v1.x*v2.x + v1.y*v2.y
-}
-
-function sub(v1, v2) {
-    return new Vector2(v1.x - v2.x, v1.y - v2.y)
-}
-
-function add(v1, v2) {
-    return new Vector2(v1.x + v2.x, v1.y + v2.y)
-}
-
-function mul(v, s) {
-    return new Vector2(v.x*s, v.y*s)
-}
-
-function div(v, s) {
-    return new Vector2(v.x/s, v.y/s)
-}
-
 function assert(condition) {
     if (!condition) {
         throw "Assertion failed";
@@ -339,10 +426,6 @@ const green = new Vector4(0, 0.5, 0, 1);
 const purple = new Vector4(111/255, 63/255, 245/255, 1);
 const blue = new Vector4(0, 0, 0.5, 1);
 const yellow = new Vector4(1, 1, 0, 1);
-
-function getPos(state, id) {
-    return new Vector2(state.pointCoords[2*id], state.pointCoords[2*id+1])
-}
 
 
 function arraysEqual(a, b) {
@@ -391,13 +474,18 @@ function init() {
 
     glMatrix.mat4.perspective(state.camera.projection, Math.PI/2, canvas.width/canvas.height, 10, -100)
 
-    let greenmat = new MonochromeMaterial(green)
-    let purplemat = new MonochromeMaterial(purple)
-    let spheremesh = new Sphere(10, 10)
-    let cubemesh = new Cuboid(1, 1, 1)
+    let greenmat = new MonochromeMaterial(green);
+    let purplemat = new MonochromeMaterial(purple);
+
+    let cubemesh = new Cuboid(1, 1, 1);
+    let torusmesh = new Torus(0.33, 0.33, 10, 10);
+    let spheremesh = new Sphere(10, 10);
+    let cylindermesh = new Cylinder(0.5, 0.5, 10, 10);
+    let conemesh = new Cone(10);
+
     
     state.nodes = []
-    state.nodes.push(new GraphicsNode(spheremesh, greenmat, glMatrix.mat4.fromValues(
+    state.nodes.push(new GraphicsNode(conemesh, greenmat, glMatrix.mat4.fromValues(
         8, 0, 0, 0,
         0, 8, 0, 0,
         0, 0, 8, 0,
