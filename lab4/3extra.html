@@ -149,59 +149,63 @@ class Sphere extends Mesh {
 }
 
 class Torus extends Mesh {
-    constructor(revolveRadius, innerRadius, circleCount, verticesPerCircle) {
+    constructor(tubeRadius, radius, circleCount, verticesPerCircle) {
         
-        let r = innerRadius + revolveRadius;
+        let r = radius + tubeRadius;
+        let tr = tubeRadius;
         
         let vertices = []
         let indices = []
 
 
         for (let i = 0; i < circleCount; ++i) {
-            let parallel = 2*Math.PI*i / (circleCount + 1);
-
-            
-        }
+            let parallel = 2*Math.PI*i / circleCount;
 
 
-        for (let i = 0; i < circleCount; ++i) {
-            let parallel = Math.PI * (i + 1) / (circleCount + 1);
-
-            // 0 -> 0, pi/2 -> r, pi -> 0
-            let circler = r*Math.sin(parallel);
-            let y = r*Math.cos(parallel);
-
-            let botring = i*verticesPerCircle;
-            let topring = (i - 1)*(verticesPerCircle);
+            let prevring = i * verticesPerCircle;
+            let nextring = verticesPerCircle * ((i + 1) % circleCount);
 
 
+            let x = r*Math.cos(parallel);
+            let y = 0;
+            let z = r*Math.sin(parallel);
+
+
+            let circleCenter = glMatrix.vec3.fromValues(x, y, z);
 
             for (let j = 0; j < verticesPerCircle; ++j) {
-                let meridian = 2 * Math.PI * j / verticesPerCircle;
+                let meridian = 2*Math.PI*j / verticesPerCircle;
 
-                let x = circler*Math.cos(meridian);
-                let z = circler*Math.sin(meridian);
+                let circleRot = glMatrix.vec3.fromValues(tr*Math.cos(meridian), tr*Math.sin(meridian), 0);
+                
+                let tubeRot = glMatrix.vec3.rotateZ(glMatrix.vec3.create(), circleRot, [0, 0, 0], parallel);
+                
+                let pos = glMatrix.vec3.add(glMatrix.vec3.create(), tubeRot, circleCenter);
 
-                vertices.push(x, y, z)
+                vertices.push(pos[0], pos[1], pos[2]);
 
                 let nextj = (j + 1) % verticesPerCircle;
 
-                if (i == 0) {
-                    indices.push(northvertexindex, botring + j, botring + nextj)
-                
-                } else {
-                    if (i == circleCount - 1) {
-                        indices.push(southvertexindex, botring + j, botring + nextj)
-                    }
-                    indices.push(botring + j, botring + nextj, topring + nextj)
-                    indices.push(topring + nextj, topring + j, botring + j)
-                }
+                indices.push(prevring + nextj, prevring + j, nextring + j);
+                indices.push(nextring + j, nextring + nextj, prevring + nextj);
             }
         }
+
+        let s = ""
+
+        for (let i = 0; i < vertices.length; i += 3) {
+            s = s+`v ${vertices[i]} ${vertices[i+1]} ${vertices[i+2]}\n`;
+        }
+        for (let i = 0; i < indices.length; i += 3) {
+            s = s+`f ${indices[i]+1} ${indices[i+1]+1} ${indices[i+2]+1}\n`;
+        }
+        console.log(s)
+
 
         super(new Float32Array(vertices), new Uint32Array(indices))  
     }
 }
+
 
 class Cylinder extends Mesh {
     constructor(radius, length, parallelCount, meridianCount) {
@@ -478,19 +482,23 @@ function init() {
     let purplemat = new MonochromeMaterial(purple);
 
     let cubemesh = new Cuboid(1, 1, 1);
-    let torusmesh = new Torus(0.33, 0.33, 10, 10);
+    let torusmesh = new Torus(1, 1, 100, 100);
     let spheremesh = new Sphere(10, 10);
     let cylindermesh = new Cylinder(0.5, 0.5, 10, 10);
     let conemesh = new Cone(10);
 
-    
-    state.nodes = []
-    state.nodes.push(new GraphicsNode(conemesh, greenmat, glMatrix.mat4.fromValues(
+    let t = glMatrix.mat4.fromValues(
         8, 0, 0, 0,
         0, 8, 0, 0,
         0, 0, 8, 0,
         0, 0, -10, 1,
-    )))
+    );
+
+    // glMatrix.mat4.mul(t, glMatrix.mat4.fromRotation(glMatrix.mat4.create(), Math.PI/2, new Float32Array([1, 0, 0])), t)
+
+    
+    state.nodes = []
+    state.nodes.push(new GraphicsNode(torusmesh, greenmat, t))
 
     for (let i = 0; i < 30; ++i) {
         state.nodes.push(new GraphicsNode(cubemesh, purplemat, glMatrix.mat4.fromValues(
@@ -510,6 +518,10 @@ function init() {
 
         for (let i = 0; i < state.nodes.length; ++i) {
             state.nodes[i].draw(state.camera)
+            
+            // glMatrix.mat4.mul(state.nodes[i].model, state.nodes[i].model);
+            // glMatrix.mat4.Translate(, )
+
         }
 
         requestAnimationFrame(loop)
