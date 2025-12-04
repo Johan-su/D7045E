@@ -280,6 +280,40 @@ class Cone extends Mesh {
     }
 }
 
+class Star extends Mesh {
+    constructor(innerDist, outerDist, spikeCount, thickness) {
+        
+        let vertices = []
+        let indices = []
+
+        let T = thickness;
+
+        let centerFrontIndex = 2 * spikeCount;
+        let centerBackIndex = centerFrontIndex + 1;
+
+        for (let i = 0; i < spikeCount; ++i) {
+
+            let outerangle = Math.PI/2 + i * 2*Math.PI/spikeCount;
+            let innerangle = Math.PI/spikeCount + outerangle;
+
+
+            vertices.push(outerDist*Math.cos(outerangle), outerDist*Math.sin(outerangle), 0);
+            vertices.push(innerDist*Math.cos(innerangle), innerDist*Math.sin(innerangle), 0);
+
+            indices.push(centerFrontIndex, 2*i, 2*i+1);
+            indices.push(centerFrontIndex, 2*i+1, (2*i+2) % (2*spikeCount));
+
+            indices.push(centerBackIndex, 2*i, 2*i+1);
+            indices.push(centerBackIndex, 2*i+1, (2*i+2) % (2*spikeCount));
+        }
+        
+        
+        vertices.push(0, 0, -T / 2, 0, 0, T / 2);
+
+        super(new Float32Array(vertices), new Uint32Array(indices))  
+    }
+}
+
 class Material {
     constructor(shaderProg) {
         this.shaderProg = shaderProg
@@ -307,7 +341,7 @@ const monofrag =`#version 300 es
     
     void main() {
         float inv = 1.0 - gl_FragCoord.z;
-        o_color = vec4(u_color.xyz * 1.6 * inv, 1.0);
+        o_color = vec4(u_color.xyz * 12.0 * inv, 1.0);
     }`;
 
 class MonochromeMaterial extends Material {  
@@ -329,16 +363,18 @@ class GraphicsNode {
     }
 
     draw(camera) {
-        gl.bindVertexArray(this.mesh.vao)
-        this.material.ApplyMaterial()
+        gl.bindVertexArray(this.mesh.vao);
+        this.material.ApplyMaterial();
         
-        let mvp = glMatrix.mat4.create()
-        glMatrix.mat4.copy(mvp, this.model)
-        glMatrix.mat4.mul(mvp, camera.view, mvp)
-        glMatrix.mat4.mul(mvp, camera.projection, mvp)
+        let mvp = glMatrix.mat4.copy(glMatrix.mat4.create(), this.model);
 
-        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp)
-        gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0)
+        let view = glMatrix.mat4.invert(glMatrix.mat4.create(), camera.model);
+
+        glMatrix.mat4.mul(mvp, view, mvp);
+        glMatrix.mat4.mul(mvp, camera.projection, mvp);
+
+        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp);
+        gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0);
     }
 
     update(transform) {
@@ -384,9 +420,17 @@ class ShaderProgram {
 }
 
 class Camera {
-    constructor(view, projection) {
-        this.view = view
+    constructor(translation, rotation, projection, maxVelocity, maxAngleVelocity) {
+        this.translation = translation;
+        this.rotation = rotation;
         this.projection = projection
+
+        this.maxVelocity = maxVelocity;
+        this.maxAngleVelocity = maxAngleVelocity;
+
+        this.model = glMatrix.mat4.create();
+        this.velocity = glMatrix.vec3.create();
+        this.angleVelocity = glMatrix.vec3.create();
     }
 }
 
@@ -474,34 +518,35 @@ function init() {
     gl.depthFunc(gl.LESS)
 
     let state = {};
-    state.camera = new Camera(glMatrix.mat4.create(), glMatrix.mat4.create())
+    state.camera = new Camera(glMatrix.vec3.create(), glMatrix.vec3.create(), glMatrix.mat4.create(), 5, Math.PI/60);
     // glMatrix.mat4.ortho(state.camera.projection, -100, 100, -100, 100, 100, -100)
 
-    glMatrix.mat4.perspective(state.camera.projection, Math.PI/2, canvas.width/canvas.height, 10, -100)
+    glMatrix.mat4.perspective(state.camera.projection, Math.PI/2, canvas.width/canvas.height, 1, -100)
 
     let greenmat = new MonochromeMaterial(green);
     let purplemat = new MonochromeMaterial(purple);
 
     let cubemesh = new Cuboid(1, 1, 1);
-    let torusmesh = new Torus(1, 1, 100, 100);
+    let torusmesh = new Torus(0.5, 0.5, 100, 100);
     let spheremesh = new Sphere(10, 10);
     let cylindermesh = new Cylinder(0.5, 0.5, 10, 10);
     let conemesh = new Cone(10);
+    let starmesh = new Star(0.5, 1, 7, 0.6);
 
     let t = glMatrix.mat4.fromValues(
         8, 0, 0, 0,
         0, 8, 0, 0,
         0, 0, 8, 0,
-        0, 0, -10, 1,
+        0, 0, -20, 1,
     );
 
     // glMatrix.mat4.mul(t, glMatrix.mat4.fromRotation(glMatrix.mat4.create(), Math.PI/2, new Float32Array([1, 0, 0])), t)
 
     
     state.nodes = []
-    state.nodes.push(new GraphicsNode(torusmesh, greenmat, t))
+    state.nodes.push(new GraphicsNode(starmesh, greenmat, t))
 
-    for (let i = 0; i < 30; ++i) {
+    for (let i = 0; i < 5; ++i) {
         state.nodes.push(new GraphicsNode(cubemesh, purplemat, glMatrix.mat4.fromValues(
             8, 0, 0, 0,
             0, 8, 0, 0,
@@ -509,28 +554,54 @@ function init() {
             getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
         )))
     }
-
-    
-
-    let loop = function(time) {
-
-        gl.clearColor(0.23, 0.23, 0.23, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-        for (let i = 0; i < state.nodes.length; ++i) {
-            state.nodes[i].draw(state.camera)
-            
-            // glMatrix.mat4.mul(state.nodes[i].model, state.nodes[i].model);
-            // glMatrix.mat4.Translate(, )
-
-        }
-
-        requestAnimationFrame(loop)
+    for (let i = 0; i < 5; ++i) {
+        state.nodes.push(new GraphicsNode(torusmesh, purplemat, glMatrix.mat4.fromValues(
+            8, 0, 0, 0,
+            0, 8, 0, 0,
+            0, 0, 8, 0,
+            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
+        )))
+    }
+    for (let i = 0; i < 5; ++i) {
+        state.nodes.push(new GraphicsNode(spheremesh, purplemat, glMatrix.mat4.fromValues(
+            8, 0, 0, 0,
+            0, 8, 0, 0,
+            0, 0, 8, 0,
+            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
+        )))
+    }
+    for (let i = 0; i < 5; ++i) {
+        state.nodes.push(new GraphicsNode(cylindermesh, purplemat, glMatrix.mat4.fromValues(
+            8, 0, 0, 0,
+            0, 8, 0, 0,
+            0, 0, 8, 0,
+            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
+        )))
+    }
+    for (let i = 0; i < 5; ++i) {
+        state.nodes.push(new GraphicsNode(conemesh, purplemat, glMatrix.mat4.fromValues(
+            8, 0, 0, 0,
+            0, 8, 0, 0,
+            0, 0, 8, 0,
+            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
+        )))
+    }
+    for (let i = 0; i < 5; ++i) {
+        state.nodes.push(new GraphicsNode(starmesh, purplemat, glMatrix.mat4.fromValues(
+            8, 0, 0, 0,
+            0, 8, 0, 0,
+            0, 0, 8, 0,
+            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
+        )))
     }
 
 
+
+
     document.addEventListener("keydown", function (evt) {
-        let vec = new Float32Array(3)
+        let vec = new Float32Array(3);
+
+        let anglevec = new Float32Array(3);
 
         switch (evt.key) {
             case 'w': {
@@ -545,18 +616,77 @@ function init() {
             case 'd': {
                 vec[0] = 1
             } break;
-            case 'e': {
+            case ' ': {
                 vec[1] = 1
             } break;
-            case 'c': {
+            case 'z': {
                 vec[1] = -1
             } break;
+
+            case 'i': {
+                anglevec[0] = 1
+            } break;
+            case 'j': {
+                anglevec[1] = 1
+            } break;
+            case 'k': {
+                anglevec[0] = -1
+            } break;
+            case 'l': {
+                anglevec[1] = -1
+            } break;
+            case 'u': {
+                anglevec[2] = 1
+            } break;
+            case 'o': {
+                anglevec[2] = -1
+            } break;
+
         }
 
-        glMatrix.mat4.translate(state.nodes[0].model, state.nodes[0].model, vec)
+        let accel = 1;
+        let angleaccel = Math.PI/720;
+
+        state.camera.velocity[0] += accel*vec[0];
+        state.camera.velocity[1] += accel*vec[1];
+        state.camera.velocity[2] += accel*vec[2];
+
+        state.camera.angleVelocity[0] += angleaccel*anglevec[0];
+        state.camera.angleVelocity[1] += angleaccel*anglevec[1];
+        state.camera.angleVelocity[2] += angleaccel*anglevec[2];
     });
 
-    loop();
+    let prev = performance.now();
+    function loop(curr) {
+
+        let dt = (curr - prev) / 1000;
+        prev = curr; 
+
+
+
+        
+        glMatrix.mat4.rotateX(state.camera.model, state.camera.model, state.camera.angleVelocity[0]);
+        glMatrix.mat4.rotateY(state.camera.model, state.camera.model, state.camera.angleVelocity[1]);
+        glMatrix.mat4.rotateZ(state.camera.model, state.camera.model, state.camera.angleVelocity[2]);
+        
+        let v = state.camera.velocity;
+        glMatrix.mat4.translate(state.camera.model, state.camera.model, glMatrix.vec3.fromValues(v[0]*dt, v[1]*dt, v[2]*dt, 0));
+
+        
+        glMatrix.vec3.lerp(state.camera.angleVelocity, state.camera.angleVelocity, glMatrix.vec3.create(), 4*dt);        
+        glMatrix.vec3.lerp(state.camera.velocity, state.camera.velocity, glMatrix.vec3.create(), 4*dt);
+
+
+        gl.clearColor(0.23, 0.23, 0.23, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        for (let i = 0; i < state.nodes.length; ++i) {
+            state.nodes[i].draw(state.camera);
+        }
+
+        requestAnimationFrame(loop)
+    }
+    loop(performance.now());
 }
 
 
