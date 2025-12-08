@@ -357,8 +357,10 @@ class MonochromeMaterial extends Material {
 }
 
 class BaseNode {
-    constructor(model, subnodes) {
-        this.model = model;
+    constructor(scale, position, rotation, subnodes) {
+        this.scale = Scale(scale);
+        this.position = Translation(position);
+        this.rotation = Rotation(rotation);
         this.subnodes = subnodes
     }
     draw(mvp) {
@@ -382,8 +384,9 @@ class LightNode extends BaseNode {
 }
 
 class GraphicsNode extends BaseNode {
-    constructor(mesh, material, model, subnodes) {
-        super(model, subnodes)
+    constructor(mesh, material, scale, position, rotation, subnodes) {
+        super(scale, position, rotation, subnodes)
+
         this.mesh = mesh
         this.material = material
     }
@@ -392,7 +395,6 @@ class GraphicsNode extends BaseNode {
         gl.bindVertexArray(this.mesh.vao);
         this.material.ApplyMaterial();
         
-
 
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp);
         gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0);
@@ -440,9 +442,9 @@ class ShaderProgram {
 
 }
 
-class Camera extends BaseNode {
+class Camera {
     constructor(model, projection, maxVelocity, maxAngleVelocity) {
-        super(model, []);
+        this.model = model;
         this.nextModel = null;
         this.projection = projection;
 
@@ -451,12 +453,6 @@ class Camera extends BaseNode {
 
         this.velocity = glMatrix.vec3.create();
         this.angleVelocity = glMatrix.vec3.create();
-    }
-    draw() {
-
-    }
-    update() {
-        
     }
 }
 
@@ -511,6 +507,16 @@ function getRandomInt(minval, maxval) {
 
 function drawNode(node, parentTransform, viewProjection) {
 
+    let radtodeg = 180 / Math.PI;
+
+    let q = glMatrix.quat.fromEuler(glMatrix.quat.create(), radtodeg*node.rotation[0], radtodeg*node.rotation[1], radtodeg*node.rotation[2], 'xyz');
+    node.model = glMatrix.mat4.fromRotationTranslationScale(
+        glMatrix.mat4.create(),
+        q,
+        node.position,
+        node.scale
+    );
+
     let shifted = glMatrix.mat4.mul(glMatrix.mat4.create(), parentTransform, node.model);
 
     let mvp = glMatrix.mat4.mul(glMatrix.mat4.create(), viewProjection, shifted);
@@ -521,6 +527,37 @@ function drawNode(node, parentTransform, viewProjection) {
         drawNode(node.subnodes[i], shifted, viewProjection);
     }
 }
+
+function Scale(scale) {
+    let scal;
+    if (typeof scale == "number") {
+        scal = [scale, scale, scale];
+    } else {
+        scal = scale;
+    }
+    return scal;
+}
+
+function Translation(translation) {
+    let tran;
+    if (typeof translation == "number") {
+        tran = [translation, translation, translation];
+    } else {
+        tran = translation;
+    } 
+    return tran;
+}
+
+function Rotation(rotation) {
+    let rot;
+    if (typeof rotation == "number") {
+        rot = [rotation, rotation, rotation];
+    } else {
+        rot = rotation;
+    }
+    return rot;
+}
+
 
 function matFromComponents(scale, translation, rotation) {
 
@@ -557,12 +594,16 @@ function matFromComponents(scale, translation, rotation) {
     glMatrix.mat4.scale(matrix, matrix, scal);
 
 
-    for (let i = 0; i < matrix.length; ++i) {
-        assert(!isNaN(matrix[i]));
-    }
+    assertReal(matrix);
 
 
     return matrix;
+}
+
+function assertReal(matrix) {
+    for (let i = 0; i < matrix.length; ++i) {
+        assert(!isNaN(matrix[i]));
+    }
 }
 
 function init() {
@@ -597,13 +638,14 @@ function init() {
     let graymat = new MonochromeMaterial(gray);
     let purplemat = new MonochromeMaterial(purple);
     let bluemat = new MonochromeMaterial(blue);
+    let redmat = new MonochromeMaterial(red);
 
     let armmesh = new Cuboid(1, 0.1, 0.1);
     // let torsomesh = new Cuboid(1, 1, 1);
 
     let cubemesh = new Cuboid(1, 1, 1);
     let torusmesh = new Torus(0.5, 0.5, 100, 100);
-    let spheremesh = new Sphere(10, 10);
+    let spheremesh = new Sphere(100, 100);
     let cylindermesh = new Cylinder(0.5, 5, 50, 50);
     let conemesh = new Cone(10);
     let starmesh = new Star(0.5, 1, 7, 0.6);
@@ -615,14 +657,14 @@ function init() {
 
     
 
-    let floor = new BaseNode(matFromComponents(1, 0, 0), []);
+    let floor = new BaseNode(1, 0, 0, []);
 
     let floormat = whitemat;
 
     for (let z = 0; z < 8; ++z) {
 
         for (let x = 0; x < 8; ++x) {
-            floor.subnodes.push(new GraphicsNode(cubemesh, floormat, matFromComponents(1, [x, 0, z], 0), []));
+            floor.subnodes.push(new GraphicsNode(cubemesh, floormat, 1, [x, 0, z], 0, []));
 
             if (x != 7) {
                 if (floormat == whitemat) floormat = blackmat;
@@ -634,94 +676,92 @@ function init() {
 
 
     
-    let footr = new GraphicsNode(conemesh, graymat, matFromComponents(0.12, [-0.5, 0, 0], 0), []);  
-    let legr = new GraphicsNode(cubemesh, graymat, matFromComponents(0.12, [-0.5, 0, 0], 0), [footr]);
+    let footr = new GraphicsNode(conemesh, graymat, 0.12, [-0.5, 0, 0], 0, []);  
+    let legr = new GraphicsNode(cubemesh, graymat, 0.12, [-0.5, 0, 0], 0, [footr]);
 
-    let footl = new GraphicsNode(conemesh, graymat, matFromComponents(0.12, [-0.5, 0, 0], 0), []);
-    let legl = new GraphicsNode(cubemesh, graymat, matFromComponents(0.12, 0, 0), [footl]);   
+    let footl = new GraphicsNode(conemesh, graymat, 0.12, [-0.5, 0, 0], 0, []);
+    let legl = new GraphicsNode(cubemesh, graymat, 0.12, 0, 0, [footl]);   
     
-    let handr = new GraphicsNode(spheremesh, graymat, matFromComponents(0.12, [-0.5, 0, 0], 0), []);
-    let armr = new GraphicsNode(armmesh, greenmat, matFromComponents(1, [-1, 0.45, 0], 0), [handr]);
+    let handr = new GraphicsNode(spheremesh, graymat, 0.12, [-0.5, 0, 0], 0, []);
+    let armr = new GraphicsNode(armmesh, greenmat, 1, [-0.55, 0.45, 0], [0, Math.PI/2, 0], [handr]);
 
-    let handl = new GraphicsNode(spheremesh, graymat, matFromComponents(0.12, [0.5, 0, 0], 0), []);
-    let arml = new GraphicsNode(armmesh, greenmat, matFromComponents(1, [1, 0.45, 0], 0), [handl]);
+    let handl = new GraphicsNode(spheremesh, graymat, 0.12, [0.5, 0, 0], 0, []);
+    let arml = new GraphicsNode(armmesh, greenmat, 1, [0.55, 0.45, 0], [0, -Math.PI/2, 0], [handl]);
 
-    let annenal = new GraphicsNode(cubemesh, graymat, matFromComponents(0.5, [0, 0.75, 0], 0), []);
-    let annenar = new GraphicsNode(cubemesh, graymat, matFromComponents(0.5, [0, 0.75, 0], 0), []);
+    let headstar = new GraphicsNode(starmesh, redmat, 1, [0, 1.8, 0], [0, 0, 0], []);
 
-    let head = new GraphicsNode(cubemesh, graymat, matFromComponents(0.5, [0, 0.75, 0], 0), [annenal, annenar]);
-    
+    let head = new GraphicsNode(spheremesh, greenmat, 0.5, [0, 0.75, 0], 0, [headstar]);
 
-    let torso = new GraphicsNode(cubemesh, graymat, matFromComponents(1, [4, 1, 3], 0), [head, arml, armr, legl, legr]);
+    let torso = new GraphicsNode(cubemesh, graymat, 1, [4, 1, 3], 0, [head, arml, armr, legl, legr]);
     
 
-    let sphere = new GraphicsNode(spheremesh, yellowmat, matFromComponents(1, [1, 1, 1], 0), []);
-    let cube = new GraphicsNode(cubemesh, yellowmat, matFromComponents(1, [2.5, 1, 6], 0), []);
-    let cone = new GraphicsNode(conemesh, yellowmat, matFromComponents(1, [7, 1, 5], [0, 0, -Math.PI/2]), []);
-    let torus = new GraphicsNode(torusmesh, yellowmat, matFromComponents(0.3, [7, 1, 1], [0, 0, -Math.PI/2]), []);
-    let cylinder = new GraphicsNode(cylindermesh, yellowmat, matFromComponents(0.3, [3, 1, 1], [0, 0, -Math.PI/2]), []);
+    let sphere = new GraphicsNode(spheremesh, yellowmat, 1, [1, 1, 1], 0, []);
+    let cube = new GraphicsNode(cubemesh, yellowmat, 1, [2.5, 1, 6], 0, []);
+    let cone = new GraphicsNode(conemesh, yellowmat, 1, [7, 1, 5], [0, 0, -Math.PI/2], []);
+    let torus = new GraphicsNode(torusmesh, yellowmat, 0.3, [7, 1, 1], [0, 0, -Math.PI/2], []);
+    let cylinder = new GraphicsNode(cylindermesh, yellowmat, 0.3, [3, 1, 1], [0, 0, -Math.PI/2], []);
 
 
 
 
-    state.base = new BaseNode(glMatrix.mat4.create(), [torso, floor, sphere, cube, cone, torus, cylinder]);
+    state.base = new BaseNode(1, 0, 0, [torso, floor, sphere, cube, cone, torus, cylinder]);
 
 
     // walls
 
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [0, 1, 0.5], [0, 0, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1, 1, 0.5], [0, 0, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [2, 1, 0.5], [0, 0, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [3, 1, 0.5], [0, 0, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [4, 1, 0.5], [0, 0, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [5, 1, 0.5], [0, 0, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [6, 1, 0.5], [0, 0, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [7, 1, 0.5], [0, 0, 0]), []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [0, 1, 0.5], [0, 0, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1, 1, 0.5], [0, 0, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [2, 1, 0.5], [0, 0, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [3, 1, 0.5], [0, 0, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [4, 1, 0.5], [0, 0, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [5, 1, 0.5], [0, 0, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [6, 1, 0.5], [0, 0, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [7, 1, 0.5], [0, 0, 0], []));
 
 
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [7.5, 1, 1], [0, Math.PI/2, 0]), []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [7.5, 1, 1], [0, Math.PI/2, 0], []));
 
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [6.5, 1, 2], [0, Math.PI/2, 0]), []));
-    // state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [6.5, 1, 3], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [6.5, 1, 4], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [6.5, 1, 5], [0, Math.PI/2, 0]), []));
-
-
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1.5, 1, 1], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1.5, 1, 2], [0, Math.PI/2, 0]), []));
-    // state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1.5, 1, 3], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1.5, 1, 4], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1.5, 1, 5], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1.5, 1, 6ww], [0, Math.PI/2, 0]), []));
-
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [0, 1, 4.5], 0), []));
-    // state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1, 1, 4.5], 0), []));
-
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [2, 1, 4.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [3, 1, 4.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [4, 1, 4.5], 0), []));
-    // state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [5, 1, 4.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [6, 1, 4.5], 0), []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [6.5, 1, 2], [0, Math.PI/2, 0], []));
+    // state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [6.5, 1, 3], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [6.5, 1, 4], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [6.5, 1, 5], [0, Math.PI/2, 0], []));
 
 
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [-0.5, 1, 1], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [-0.5, 1, 2], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [-0.5, 1, 3], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [-0.5, 1, 4], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [-0.5, 1, 5], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [-0.5, 1, 6], [0, Math.PI/2, 0]), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [-0.5, 1, 7], [0, Math.PI/2, 0]), []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1.5, 1, 1], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1.5, 1, 2], [0, Math.PI/2, 0], []));
+    // state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1.5, 1, 3], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1.5, 1, 4], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1.5, 1, 5], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1.5, 1, 6], [0, Math.PI/2, 0], []));
+
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [0, 1, 4.5], 0, []));
+    // state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1, 1, 4.5], 0, []));
+
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [2, 1, 4.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [3, 1, 4.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [4, 1, 4.5], 0, []));
+    // state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [5, 1, 4.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [6, 1, 4.5], 0, []));
+
+
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [-0.5, 1, 1], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [-0.5, 1, 2], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [-0.5, 1, 3], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [-0.5, 1, 4], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [-0.5, 1, 5], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [-0.5, 1, 6], [0, Math.PI/2, 0], []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [-0.5, 1, 7], [0, Math.PI/2, 0], []));
 
 
 
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [0, 1, 7.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [1, 1, 7.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [2, 1, 7.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [3, 1, 7.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [4, 1, 7.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [5, 1, 7.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [6, 1, 7.5], 0), []));
-    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, matFromComponents(1, [7, 1, 7.5], 0), []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [0, 1, 7.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [1, 1, 7.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [2, 1, 7.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [3, 1, 7.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [4, 1, 7.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [5, 1, 7.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [6, 1, 7.5], 0, []));
+    state.base.subnodes.push(new GraphicsNode(wallmesh, bluemat, 1, [7, 1, 7.5], 0, []));
 
 
 
@@ -793,6 +833,8 @@ function init() {
         glMatrix.vec3.scaleAndAdd(state.camera.angleVelocity, state.camera.angleVelocity, anglevec, angleaccel);
     });
 
+
+
     let prev = performance.now();
     function loop(curr) {
         let dt = (curr - prev) / 1000;
@@ -804,6 +846,19 @@ function init() {
         }
 
         let decay = Math.exp(-4*dt);
+        
+        let scale = 0.5+Math.abs(Math.cos(curr / 1000));
+        headstar.scale = glMatrix.vec3.fromValues(scale, scale, scale);
+
+        armr.rotation[2] += Math.PI/720;
+        arml.rotation[2] += Math.PI/720;        
+        
+        head.rotation[1] += Math.PI/720;
+
+        torso.position = [4+Math.cos(curr / 1000), 1, 3];
+        head.position = [0, 0.75, 0.25*Math.cos(2*curr / 1000)];
+
+
 
         glMatrix.vec3.scale(state.camera.angleVelocity, state.camera.angleVelocity, decay);        
         glMatrix.vec3.scale(state.camera.velocity, state.camera.velocity, decay);
