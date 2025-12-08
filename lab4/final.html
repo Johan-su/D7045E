@@ -262,7 +262,7 @@ class Cone extends Mesh {
 
         for (let i = 0; i < meridianCount; ++i) {
 
-            let meridian = 2*Math.PI*i / (meridianCount + 1); 
+            let meridian = 2*Math.PI*i / meridianCount; 
 
             let x = r*Math.cos(meridian);
             let z = r*Math.sin(meridian);
@@ -340,8 +340,9 @@ const monofrag =`#version 300 es
     out vec4 o_color;
     
     void main() {
-        float inv = 1.0 - gl_FragCoord.z;
-        o_color = vec4(u_color.xyz * 12.0 * inv, 1.0);
+        o_color = u_color;
+        // float inv = 1.0 - gl_FragCoord.z;
+        // o_color = vec4(u_color.xyz * 12.0 * inv, 1.0);
     }`;
 
 class MonochromeMaterial extends Material {  
@@ -355,23 +356,43 @@ class MonochromeMaterial extends Material {
     }
 }
 
-class GraphicsNode {
-    constructor(mesh, material, model) {
+class BaseNode {
+    constructor(model, subnodes) {
+        this.model = model;
+        this.subnodes = subnodes
+    }
+    draw(mvp) {
+
+    }
+    update() {
+        
+    }
+}
+
+class LightNode extends BaseNode {
+    constructor(model, subnodes) {
+        super(model, subnodes)
+    }
+    draw(mvp) {
+
+    }
+    update() {
+
+    }
+}
+
+class GraphicsNode extends BaseNode {
+    constructor(mesh, material, model, subnodes) {
+        super(model, subnodes)
         this.mesh = mesh
         this.material = material
-        this.model = model
     }
 
-    draw(camera) {
+    draw(mvp) {
         gl.bindVertexArray(this.mesh.vao);
         this.material.ApplyMaterial();
         
-        let mvp = glMatrix.mat4.copy(glMatrix.mat4.create(), this.model);
 
-        let view = glMatrix.mat4.invert(glMatrix.mat4.create(), camera.model);
-
-        glMatrix.mat4.mul(mvp, view, mvp);
-        glMatrix.mat4.mul(mvp, camera.projection, mvp);
 
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp);
         gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0);
@@ -419,18 +440,23 @@ class ShaderProgram {
 
 }
 
-class Camera {
-    constructor(translation, rotation, projection, maxVelocity, maxAngleVelocity) {
-        this.translation = translation;
-        this.rotation = rotation;
-        this.projection = projection
+class Camera extends BaseNode {
+    constructor(model, projection, maxVelocity, maxAngleVelocity) {
+        super(model, []);
+        this.nextModel = null;
+        this.projection = projection;
 
         this.maxVelocity = maxVelocity;
         this.maxAngleVelocity = maxAngleVelocity;
 
-        this.model = glMatrix.mat4.create();
         this.velocity = glMatrix.vec3.create();
         this.angleVelocity = glMatrix.vec3.create();
+    }
+    draw() {
+
+    }
+    update() {
+        
     }
 }
 
@@ -449,22 +475,6 @@ class Vector4 {
     }
 }
 
-
-// < 0 right turn
-// > 0 left turn
-function orient(v1, v2, v3) {
-    let v = (v3.y - v1.y)*(v2.x - v1.x) - (v3.x - v1.x)*(v2.y - v1.y);
-    return -v; // -v because y coordinate is flipped in webgl
-}
-
-function rightTurn(v1, v2, v3) {
-    return orient(v1, v2, v3) < 0;
-}
-
-function leftTurn(v1, v2, v3) {
-    return orient(v1, v2, v3) > 0;
-}
-
 const white = new Vector4(1, 1, 1, 1);
 const lightgray = new Vector4(0.1, 0.1, 0.1, 1);
 const black = new Vector4(0, 0, 0, 1);
@@ -474,7 +484,7 @@ const red = new Vector4(1, 0, 0, 1);
 const green = new Vector4(0, 0.5, 0, 1);
 const purple = new Vector4(111/255, 63/255, 245/255, 1);
 const blue = new Vector4(0, 0, 0.5, 1);
-const yellow = new Vector4(1, 1, 0, 1);
+const yellow = new Vector4(0.6, 0.6, 0, 1);
 
 
 function arraysEqual(a, b) {
@@ -499,6 +509,62 @@ function getRandomInt(minval, maxval) {
     return Math.round(getRandom(minval, maxval));
 }
 
+function drawNode(node, parentTransform, viewProjection) {
+
+    let shifted = glMatrix.mat4.mul(glMatrix.mat4.create(), parentTransform, node.model);
+
+    let mvp = glMatrix.mat4.mul(glMatrix.mat4.create(), viewProjection, shifted);
+
+    node.draw(mvp);
+
+    for (let i = 0; i < node.subnodes.length; ++i) {
+        drawNode(node.subnodes[i], shifted, viewProjection);
+    }
+}
+
+function matFromComponents(scale, translation, rotation) {
+
+    let matrix = glMatrix.mat4.create();
+
+    let rot;
+    let tran;
+    let scal;
+    
+    if (typeof rotation == "number") {
+        rot = [rotation, rotation, rotation];
+    } else {
+        rot = rotation;
+    }
+
+    if (typeof translation == "number") {
+        tran = [translation, translation, translation];
+    } else {
+        tran = translation;
+    } 
+
+
+    if (typeof scale == "number") {
+        scal = [scale, scale, scale];
+    } else {
+        scal = scale;
+    }
+
+
+    glMatrix.mat4.scale(matrix, matrix, scal);
+    glMatrix.mat4.rotateX(matrix, matrix, rot[0]);
+    glMatrix.mat4.rotateY(matrix, matrix, rot[1]);
+    glMatrix.mat4.rotateZ(matrix, matrix, rot[2]);
+    glMatrix.mat4.translate(matrix, matrix, tran);
+
+
+    for (let i = 0; i < matrix.length; ++i) {
+        assert(!isNaN(matrix[i]));
+    }
+
+
+    return matrix;
+}
+
 function init() {
     try {canvas = document.getElementById("webglcanvas")}
     catch (e) {
@@ -518,13 +584,21 @@ function init() {
     gl.depthFunc(gl.LESS)
 
     let state = {};
-    state.camera = new Camera(glMatrix.vec3.create(), glMatrix.vec3.create(), glMatrix.mat4.create(), 5, Math.PI/60);
+    state.camera = new Camera(matFromComponents(1, [4, 4, 12], 0), glMatrix.mat4.create(), 5, Math.PI/60);
     // glMatrix.mat4.ortho(state.camera.projection, -100, 100, -100, 100, 100, -100)
 
-    glMatrix.mat4.perspective(state.camera.projection, Math.PI/2, canvas.width/canvas.height, 1, -100)
+    glMatrix.mat4.perspective(state.camera.projection, Math.PI/2.1, canvas.width/canvas.height, 0.1, -100)
 
+
+    let yellowmat = new MonochromeMaterial(yellow);
+    let whitemat = new MonochromeMaterial(white);
+    let blackmat = new MonochromeMaterial(black);
     let greenmat = new MonochromeMaterial(green);
+    let graymat = new MonochromeMaterial(gray);
     let purplemat = new MonochromeMaterial(purple);
+
+    let armmesh = new Cuboid(1, 0.1, 0.1);
+    // let torsomesh = new Cuboid(1, 1, 1);
 
     let cubemesh = new Cuboid(1, 1, 1);
     let torusmesh = new Torus(0.5, 0.5, 100, 100);
@@ -533,67 +607,62 @@ function init() {
     let conemesh = new Cone(10);
     let starmesh = new Star(0.5, 1, 7, 0.6);
 
-    let t = glMatrix.mat4.fromValues(
-        8, 0, 0, 0,
-        0, 8, 0, 0,
-        0, 0, 8, 0,
-        0, 0, -20, 1,
-    );
-
     // glMatrix.mat4.mul(t, glMatrix.mat4.fromRotation(glMatrix.mat4.create(), Math.PI/2, new Float32Array([1, 0, 0])), t)
 
-    
-    state.nodes = []
-    state.nodes.push(new GraphicsNode(starmesh, greenmat, t))
 
-    for (let i = 0; i < 5; ++i) {
-        state.nodes.push(new GraphicsNode(cubemesh, purplemat, glMatrix.mat4.fromValues(
-            8, 0, 0, 0,
-            0, 8, 0, 0,
-            0, 0, 8, 0,
-            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
-        )))
+
+    
+
+    let floor = new BaseNode(matFromComponents(1, 0, 0), []);
+
+    let floormat = whitemat;
+
+    for (let z = 0; z < 8; ++z) {
+
+        for (let x = 0; x < 8; ++x) {
+            floor.subnodes.push(new GraphicsNode(cubemesh, floormat, matFromComponents(1, [x, 0, z], 0), []));
+
+            if (x != 7) {
+                if (floormat == whitemat) floormat = blackmat;
+                else floormat = whitemat;
+            }
+        }
     }
-    for (let i = 0; i < 5; ++i) {
-        state.nodes.push(new GraphicsNode(torusmesh, purplemat, glMatrix.mat4.fromValues(
-            8, 0, 0, 0,
-            0, 8, 0, 0,
-            0, 0, 8, 0,
-            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
-        )))
-    }
-    for (let i = 0; i < 5; ++i) {
-        state.nodes.push(new GraphicsNode(spheremesh, purplemat, glMatrix.mat4.fromValues(
-            8, 0, 0, 0,
-            0, 8, 0, 0,
-            0, 0, 8, 0,
-            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
-        )))
-    }
-    for (let i = 0; i < 5; ++i) {
-        state.nodes.push(new GraphicsNode(cylindermesh, purplemat, glMatrix.mat4.fromValues(
-            8, 0, 0, 0,
-            0, 8, 0, 0,
-            0, 0, 8, 0,
-            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
-        )))
-    }
-    for (let i = 0; i < 5; ++i) {
-        state.nodes.push(new GraphicsNode(conemesh, purplemat, glMatrix.mat4.fromValues(
-            8, 0, 0, 0,
-            0, 8, 0, 0,
-            0, 0, 8, 0,
-            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
-        )))
-    }
-    for (let i = 0; i < 5; ++i) {
-        state.nodes.push(new GraphicsNode(starmesh, purplemat, glMatrix.mat4.fromValues(
-            8, 0, 0, 0,
-            0, 8, 0, 0,
-            0, 0, 8, 0,
-            getRandom(-50, 50), getRandom(-50, 50), getRandom(-80, -35), 1,
-        )))
-    }
+
+
+
+    
+    let footr = new GraphicsNode(conemesh, graymat, matFromComponents(0.12, [-0.5, 0, 0], 0), []);  
+    let legr = new GraphicsNode(cubemesh, graymat, matFromComponents(0.12, [-0.5, 0, 0], 0), [footr]);
+
+    let footl = new GraphicsNode(conemesh, graymat, matFromComponents(0.12, [-0.5, 0, 0], 0), []);
+    let legl = new GraphicsNode(cubemesh, graymat, matFromComponents(0.12, 0, 0), [footl]);   
+    
+    let handr = new GraphicsNode(spheremesh, graymat, matFromComponents(0.12, [-0.5, 0, 0], 0), []);
+    let armr = new GraphicsNode(armmesh, greenmat, matFromComponents(1, [-1, 0.45, 0], 0), [handr]);
+
+    let handl = new GraphicsNode(spheremesh, graymat, matFromComponents(0.12, [0.5, 0, 0], 0), []);
+    let arml = new GraphicsNode(armmesh, greenmat, matFromComponents(1, [1, 0.45, 0], 0), [handl]);
+
+    let annenal = new GraphicsNode(cubemesh, graymat, matFromComponents(0.5, [0, 0.75, 0], 0), []);
+    let annenar = new GraphicsNode(cubemesh, graymat, matFromComponents(0.5, [0, 0.75, 0], 0), []);
+
+    let head = new GraphicsNode(cubemesh, graymat, matFromComponents(0.5, [0, 0.75, 0], 0), [annenal, annenar]);
+    
+
+
+    let torso = new GraphicsNode(cubemesh, graymat, matFromComponents(1, [4, 1, 3], 0), [head, arml, armr, legl, legr]);
+    
+
+    let sphere = new GraphicsNode(spheremesh, yellowmat, matFromComponents(1, [1, 1, 1], 0), []);
+    let cube = new GraphicsNode(cubemesh, yellowmat, matFromComponents(1, [2, 1, 5], 0), []);
+    let cone = new GraphicsNode(conemesh, yellowmat, matFromComponents(1, [7, 1, 5], [0, 0, Math.PI]), []);
+
+
+
+    state.base = new BaseNode(glMatrix.mat4.create(), [torso, floor, sphere, cube, cone]);
+
+
 
 
 
@@ -641,48 +710,62 @@ function init() {
             case 'o': {
                 anglevec[2] = -1
             } break;
+            case 'r': {
+                let scale = glMatrix.vec3.create();
+                let translation = glMatrix.vec3.create();
+                glMatrix.mat4.decompose(glMatrix.quat.create(), translation, scale, state.camera.model);
+
+                state.camera.nextModel = glMatrix.mat4.fromValues(
+                    scale[0], 0, 0, 0,
+                    0, scale[1], 0, 0,
+                    0, 0, scale[2], 0,
+                    translation[0], translation[1], translation[2], 1,
+                );
+                state.camera.velocity = glMatrix.vec3.create();
+                state.camera.angleVelocity = glMatrix.vec3.create();
+            } break;
 
         }
 
         let accel = 1;
-        let angleaccel = Math.PI/720;
+        let angleaccel = Math.PI/8;
 
-        state.camera.velocity[0] += accel*vec[0];
-        state.camera.velocity[1] += accel*vec[1];
-        state.camera.velocity[2] += accel*vec[2];
-
-        state.camera.angleVelocity[0] += angleaccel*anglevec[0];
-        state.camera.angleVelocity[1] += angleaccel*anglevec[1];
-        state.camera.angleVelocity[2] += angleaccel*anglevec[2];
+        glMatrix.vec3.scaleAndAdd(state.camera.velocity, state.camera.velocity, vec, accel);
+        glMatrix.vec3.scaleAndAdd(state.camera.angleVelocity, state.camera.angleVelocity, anglevec, angleaccel);
     });
 
     let prev = performance.now();
     function loop(curr) {
-
         let dt = (curr - prev) / 1000;
         prev = curr; 
 
+        if (state.camera.nextModel != null) {
+            state.camera.model = state.camera.nextModel;
+            state.camera.nextModel = null;
+        }
+
+        let decay = Math.exp(-4*dt);
+
+        glMatrix.vec3.scale(state.camera.angleVelocity, state.camera.angleVelocity, decay);        
+        glMatrix.vec3.scale(state.camera.velocity, state.camera.velocity, decay);
 
 
+        glMatrix.mat4.translate(state.camera.model, state.camera.model, glMatrix.vec3.scale(glMatrix.vec3.create(), state.camera.velocity, dt));
         
-        glMatrix.mat4.rotateX(state.camera.model, state.camera.model, state.camera.angleVelocity[0]);
-        glMatrix.mat4.rotateY(state.camera.model, state.camera.model, state.camera.angleVelocity[1]);
-        glMatrix.mat4.rotateZ(state.camera.model, state.camera.model, state.camera.angleVelocity[2]);
+        glMatrix.mat4.rotateX(state.camera.model, state.camera.model, state.camera.angleVelocity[0]*dt);
+        glMatrix.mat4.rotateY(state.camera.model, state.camera.model, state.camera.angleVelocity[1]*dt);
+        glMatrix.mat4.rotateZ(state.camera.model, state.camera.model, state.camera.angleVelocity[2]*dt);
         
-        let v = state.camera.velocity;
-        glMatrix.mat4.translate(state.camera.model, state.camera.model, glMatrix.vec3.fromValues(v[0]*dt, v[1]*dt, v[2]*dt, 0));
+        let view = glMatrix.mat4.invert(glMatrix.mat4.create(), state.camera.model);
 
-        
-        glMatrix.vec3.lerp(state.camera.angleVelocity, state.camera.angleVelocity, glMatrix.vec3.create(), 4*dt);        
-        glMatrix.vec3.lerp(state.camera.velocity, state.camera.velocity, glMatrix.vec3.create(), 4*dt);
+        let viewProjection = glMatrix.mat4.mul(glMatrix.mat4.create(), state.camera.projection, view);
 
 
         gl.clearColor(0.23, 0.23, 0.23, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        for (let i = 0; i < state.nodes.length; ++i) {
-            state.nodes[i].draw(state.camera);
-        }
+
+        drawNode(state.base, glMatrix.mat4.create(), viewProjection);
 
         requestAnimationFrame(loop)
     }
