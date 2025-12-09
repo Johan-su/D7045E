@@ -303,6 +303,7 @@ class Torus extends Mesh {
         
         let vertices = []
         let indices = []
+        let normals = [];
 
 
         for (let i = 0; i < circleCount; ++i) {
@@ -320,6 +321,7 @@ class Torus extends Mesh {
                 let y = tubeRadius * Math.sin(meridian);
                 let z = (radius + tubeRadius * Math.cos(meridian)) * Math.sin(parallel);
                 vertices.push(x, y, z);
+                normals.push(Math.cos(meridian)*Math.cos(parallel), Math.sin(meridian), Math.cos(meridian)*Math.sin(parallel));
 
 
                 let nextj = (j + 1) % verticesPerCircle;
@@ -328,7 +330,7 @@ class Torus extends Mesh {
                 indices.push(prevring + nextj, nextring + nextj, nextring + j);
             }
         }
-        let normals = calculateNormals(vertices, indices);
+        // normals = calculateNormals(vertices, indices);
         // PrintObj(vertices, indices, normals);
         super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
@@ -340,8 +342,9 @@ class Cylinder extends Mesh {
         
         let r = radius;
         
-        let vertices = []
-        let indices = []
+        let vertices = [];
+        let indices = [];
+        let normals = [];
 
 
         for (let i = 0; i < parallelCount; ++i) {
@@ -361,7 +364,7 @@ class Cylinder extends Mesh {
                 let z = r*Math.sin(meridian);
 
                 vertices.push(x, y, z)
-
+                normals.push(Math.cos(meridian), 0, Math.sin(meridian));
                 let nextj = (j + 1) % meridianCount;
 
                 if (i != 0) {
@@ -370,7 +373,7 @@ class Cylinder extends Mesh {
                 }
             }
         }
-        let normals = calculateNormals(vertices, indices);
+        // normals = calculateNormals(vertices, indices);
         super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
@@ -455,7 +458,7 @@ const monovert =`#version 300 es
     layout(location = 0) in vec4 a_coords;
     layout(location = 1) in vec3 a_normals;
     
-    uniform mat4 u_invtMV;
+    uniform mat4 u_normalMatrix;
     uniform mat4 u_MV;
     uniform mat4 u_MVP;
 
@@ -465,7 +468,7 @@ const monovert =`#version 300 es
     void main() {
         gl_Position = u_MVP * a_coords;
         v_fragPos = (u_MV * a_coords).xyz;
-        v_normal = (u_invtMV * vec4(normalize(a_normals), 0.0)).xyz;
+        v_normal = (u_normalMatrix * vec4(normalize(a_normals), 0.0)).xyz;
     }`;
 
 const monofrag =`#version 300 es
@@ -484,7 +487,7 @@ const monofrag =`#version 300 es
     
     void main() {
         
-        vec3 ambient = vec3(0.2);
+        vec3 ambient = vec3(0.1);
 
         vec3 normal = normalize(v_normal);
 
@@ -500,7 +503,7 @@ const monofrag =`#version 300 es
         vec3 R = reflect(-L, normal);
 
         float specularStrength = pow(max(dot(R, V), 0.0), 32.0);
-        vec3 specular = specularStrength * u_lightColor; 
+        vec3 specular = 0.4 * specularStrength * u_lightColor; 
 
         vec3 lighting = ambient + diffuse + specular;
         o_color = vec4(lighting * u_color.xyz, 1);
@@ -552,7 +555,7 @@ class GraphicsNode extends BaseNode {
         this.material = material
     }
 
-    draw(mvp, invtmv, mv, lightpos, lightcolor) {
+    draw(mvp, normalMatrix, mv, lightpos, lightcolor) {
         gl.bindVertexArray(this.mesh.vao);
         this.material.ApplyMaterial();
 
@@ -561,7 +564,7 @@ class GraphicsNode extends BaseNode {
         gl.uniform3f(gl.getUniformLocation(this.material.shaderProg.get(), "u_lightColor"), lightcolor[0], lightcolor[1], lightcolor[2]);
         gl.uniform3f(gl.getUniformLocation(this.material.shaderProg.get(), "u_lightPosition"), eyelightpos[0], eyelightpos[1], eyelightpos[2]);
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MV"), false, mv);        
-        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_invtMV"), false, invtmv);        
+        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_normalMatrix"), false, normalMatrix);        
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp);
         gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0);
     }
@@ -685,19 +688,23 @@ function drawNode(node, parentTransform, view, projection) {
 
     let shifted = glMatrix.mat4.mul(glMatrix.mat4.create(), parentTransform, node.model);
 
+
     let mv = glMatrix.mat4.mul(glMatrix.mat4.create(), view, shifted);
     
-    let invmv = glMatrix.mat4.invert(glMatrix.mat4.create(), mv);
-    
-    let invtmv = glMatrix.mat4.transpose(glMatrix.mat4.create(), invmv);
+    let normalMatrix = glMatrix.mat4.clone(mv);
+    normalMatrix[12] = 0;
+    normalMatrix[13] = 0;
+    normalMatrix[14] = 0;
+    glMatrix.mat4.invert(normalMatrix, normalMatrix);
+    glMatrix.mat4.transpose(normalMatrix, normalMatrix);
 
     let mvp = glMatrix.mat4.mul(glMatrix.mat4.create(), projection, mv);
 
-    let lightpos = [4, 10, 4];
+    let lightpos = [4, 3, 4];
 
     let lightcolor = [1, 1, 1];
 
-    node.draw(mvp, invtmv, mv, lightpos, lightcolor);
+    node.draw(mvp, normalMatrix, mv, lightpos, lightcolor);
 
     for (let i = 0; i < node.subnodes.length; ++i) {
         drawNode(node.subnodes[i], shifted, view, projection);
