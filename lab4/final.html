@@ -329,7 +329,7 @@ class Torus extends Mesh {
             }
         }
         let normals = calculateNormals(vertices, indices);
-        PrintObj(vertices, indices, normals);
+        // PrintObj(vertices, indices, normals);
         super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
@@ -456,35 +456,53 @@ const monovert =`#version 300 es
     layout(location = 1) in vec3 a_normals;
     
     uniform mat4 u_invtMV;
+    uniform mat4 u_MV;
     uniform mat4 u_MVP;
 
-    out vec4 v_normal;
+    out vec3 v_normal;
+    out vec3 v_fragPos;
 
     void main() {
         gl_Position = u_MVP * a_coords;
-        v_normal = u_invtMV * vec4(normalize(a_normals), 1.0);
+        v_fragPos = (u_MV * a_coords).xyz;
+        v_normal = (u_invtMV * vec4(normalize(a_normals), 0.0)).xyz;
     }`;
 
 const monofrag =`#version 300 es
     precision highp float;
-    
+
+    uniform vec3 u_lightPosition; // eye space
+    uniform vec3 u_lightColor;
+
+
     uniform vec4 u_color;
 
-    in vec4 v_normal;
+    in vec3 v_fragPos;
+
+    in vec3 v_normal;
     out vec4 o_color;
     
     void main() {
+        
+        vec3 ambient = vec3(0.2);
 
-        vec3 lightColor = vec3(1.0, 1.0, 1.0);
-        vec3 lightSourcetoDir = normalize(vec3(0.0, 1.0, 0.0));
-        vec3 normal = normalize(v_normal.xyz);
+        vec3 normal = normalize(v_normal);
 
-        float diffuseStrength = max(0.0, dot(lightSourcetoDir, normal));
+        vec3 diff = u_lightPosition - v_fragPos;
 
-        vec3 diffuse = diffuseStrength * lightColor;
 
-        vec3 ambient = vec3(0.5, 0.5, 0.5);
-        vec3 lighting = ambient * 0.2 + diffuse;
+        vec3 L = normalize(diff);
+        vec3 V = normalize(-v_fragPos);
+
+        float diffuseStrength = max(0.0, dot(normal, L));
+        vec3 diffuse = diffuseStrength * u_lightColor;
+
+        vec3 R = reflect(-L, normal);
+
+        float specularStrength = pow(max(dot(R, V), 0.0), 32.0);
+        vec3 specular = specularStrength * u_lightColor; 
+
+        vec3 lighting = ambient + diffuse + specular;
         o_color = vec4(lighting * u_color.xyz, 1);
     }`;
 
@@ -534,10 +552,15 @@ class GraphicsNode extends BaseNode {
         this.material = material
     }
 
-    draw(mvp, invtmv) {
+    draw(mvp, invtmv, mv, lightpos, lightcolor) {
         gl.bindVertexArray(this.mesh.vao);
         this.material.ApplyMaterial();
-        
+
+        let eyelightpos = glMatrix.vec3.transformMat4(glMatrix.vec3.create(), lightpos, mv);
+
+        gl.uniform3f(gl.getUniformLocation(this.material.shaderProg.get(), "u_lightColor"), lightcolor[0], lightcolor[1], lightcolor[2]);
+        gl.uniform3f(gl.getUniformLocation(this.material.shaderProg.get(), "u_lightPosition"), eyelightpos[0], eyelightpos[1], eyelightpos[2]);
+        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MV"), false, mv);        
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_invtMV"), false, invtmv);        
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp);
         gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0);
@@ -670,7 +693,11 @@ function drawNode(node, parentTransform, view, projection) {
 
     let mvp = glMatrix.mat4.mul(glMatrix.mat4.create(), projection, mv);
 
-    node.draw(mvp, invtmv);
+    let lightpos = [4, 10, 4];
+
+    let lightcolor = [1, 1, 1];
+
+    node.draw(mvp, invtmv, mv, lightpos, lightcolor);
 
     for (let i = 0; i < node.subnodes.length; ++i) {
         drawNode(node.subnodes[i], shifted, view, projection);
