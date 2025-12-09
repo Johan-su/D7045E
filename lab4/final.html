@@ -139,7 +139,9 @@ function calculateNormals(vertices, indices) {
     for (let i = 0; i < vecNormals.length; ++i) {
         glMatrix.vec3.normalize(vecNormals[i], vecNormals[i]);
 
-        normals.push(vecNormals[i], vecNormals[i+1], vecNormals[i+2]);
+        let v = vecNormals[i];
+
+        normals.push(v[0], v[1], v[2]);
     }
 
 
@@ -215,6 +217,7 @@ class Cuboid extends Mesh {
         ];
 
         let normals = calculateNormals(vertices, indices);
+
         super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
@@ -242,8 +245,6 @@ class Sphere extends Mesh {
             let botring = i*meridianCount;
             let topring = (i - 1)*(meridianCount);
 
-
-
             for (let j = 0; j < meridianCount; ++j) {
                 let meridian = 2 * Math.PI * j / meridianCount;
 
@@ -255,14 +256,18 @@ class Sphere extends Mesh {
                 let nextj = (j + 1) % meridianCount;
 
                 if (i == 0) {
-                    indices.push(northvertexindex, botring + j, botring + nextj)
+                    indices.push(botring + nextj, botring + j, northvertexindex);
+                    // indices.push(northvertexindex, botring + j, botring + nextj)
                 
                 } else {
                     if (i == parallelCount - 1) {
                         indices.push(southvertexindex, botring + j, botring + nextj)
                     }
-                    indices.push(botring + j, botring + nextj, topring + nextj)
-                    indices.push(topring + nextj, topring + j, botring + j)
+                    indices.push(botring + nextj, botring + j, topring + j);
+                    indices.push(topring + j, topring + nextj, botring + nextj);
+
+                    // indices.push(botring + j, botring + nextj, topring + nextj);
+                    // indices.push(topring + nextj, topring + j, botring + j);
                 }
             }
         }
@@ -270,19 +275,25 @@ class Sphere extends Mesh {
         vertices.push(0, r, 0, 0, -r, 0)
 
         let normals = calculateNormals(vertices, indices);
+
+
         super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
 
-function PrintObj(vertices, indices) {
+function PrintObj(vertices, indices, normals) {
     let s = ""
 
     for (let i = 0; i < vertices.length; i += 3) {
         s = s+`v ${vertices[i]} ${vertices[i+1]} ${vertices[i+2]}\n`;
     }
-    for (let i = 0; i < indices.length; i += 3) {
-        s = s+`f ${indices[i]+1} ${indices[i+1]+1} ${indices[i+2]+1}\n`;
+    for (let i = 0; i < normals.length; i += 3) {
+        s = s+`vn ${normals[i]} ${normals[i+1]} ${normals[i+2]}\n`;
     }
+    for (let i = 0; i < indices.length; i += 3) {
+        s = s+`f ${indices[i]+1}//${indices[i]+1} ${indices[i+1]+1}//${indices[i+1]+1} ${indices[i+2]+1}//${indices[i+2]+1}\n`;
+    }
+    
     console.log(s)
 }
 
@@ -329,6 +340,7 @@ class Torus extends Mesh {
             }
         }
         let normals = calculateNormals(vertices, indices);
+        PrintObj(vertices, indices, normals);
         super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
@@ -396,7 +408,7 @@ class Cone extends Mesh {
             vertices.push(x, y, z);
 
             let nexti = (i + 1) % meridianCount
-            indices.push(topvertexindex, i, nexti);
+            indices.push(nexti, i, topvertexindex);
         }
 
 
@@ -426,8 +438,8 @@ class Star extends Mesh {
             vertices.push(outerDist*Math.cos(outerangle), outerDist*Math.sin(outerangle), 0);
             vertices.push(innerDist*Math.cos(innerangle), innerDist*Math.sin(innerangle), 0);
 
-            indices.push(centerFrontIndex, 2*i, 2*i+1);
-            indices.push(centerFrontIndex, 2*i+1, (2*i+2) % (2*spikeCount));
+            indices.push(2*i+1, 2*i, centerFrontIndex);
+            indices.push((2*i+2) % (2*spikeCount), 2*i+1, centerFrontIndex);
 
             indices.push(centerBackIndex, 2*i, 2*i+1);
             indices.push(centerBackIndex, 2*i+1, (2*i+2) % (2*spikeCount));
@@ -454,13 +466,14 @@ const monovert =`#version 300 es
     layout(location = 0) in vec4 a_coords;
     layout(location = 1) in vec3 a_normals;
     
+    uniform mat4 u_invtMV;
     uniform mat4 u_MVP;
 
-    out vec3 v_normal;
+    out vec4 v_normal;
 
     void main() {
         gl_Position = u_MVP * a_coords;
-        v_normal = a_normals;
+        v_normal = u_invtMV * vec4(normalize(a_normals), 1.0);
     }`;
 
 const monofrag =`#version 300 es
@@ -468,12 +481,21 @@ const monofrag =`#version 300 es
     
     uniform vec4 u_color;
 
-    in vec3 v_normal;
+    in vec4 v_normal;
     out vec4 o_color;
     
     void main() {
-        float ambient = 0.5;
-        float lighting = ambient;
+
+        vec3 lightColor = vec3(1.0, 1.0, 1.0);
+        vec3 lightSourcetoDir = normalize(vec3(0.0, 1.0, 0.0));
+        vec3 normal = normalize(v_normal.xyz);
+
+        float diffuseStrength = max(0.0, dot(lightSourcetoDir, normal));
+
+        vec3 diffuse = diffuseStrength * lightColor;
+
+        vec3 ambient = vec3(0.5, 0.5, 0.5);
+        vec3 lighting = ambient * 0.2 + diffuse;
         o_color = vec4(lighting * u_color.xyz, 1);
     }`;
 
@@ -523,11 +545,11 @@ class GraphicsNode extends BaseNode {
         this.material = material
     }
 
-    draw(mvp) {
+    draw(mvp, invtmv) {
         gl.bindVertexArray(this.mesh.vao);
         this.material.ApplyMaterial();
         
-
+        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_invtMV"), false, invtmv);        
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp);
         gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0);
     }
@@ -637,7 +659,7 @@ function getRandomInt(minval, maxval) {
     return Math.round(getRandom(minval, maxval));
 }
 
-function drawNode(node, parentTransform, viewProjection) {
+function drawNode(node, parentTransform, view, projection) {
 
     let radtodeg = 180 / Math.PI;
 
@@ -651,12 +673,18 @@ function drawNode(node, parentTransform, viewProjection) {
 
     let shifted = glMatrix.mat4.mul(glMatrix.mat4.create(), parentTransform, node.model);
 
-    let mvp = glMatrix.mat4.mul(glMatrix.mat4.create(), viewProjection, shifted);
+    let mv = glMatrix.mat4.mul(glMatrix.mat4.create(), view, shifted);
+    
+    let invmv = glMatrix.mat4.invert(glMatrix.mat4.create(), mv);
+    
+    let invtmv = glMatrix.mat4.transpose(glMatrix.mat4.create(), invmv);
 
-    node.draw(mvp);
+    let mvp = glMatrix.mat4.mul(glMatrix.mat4.create(), projection, mv);
+
+    node.draw(mvp, invtmv);
 
     for (let i = 0; i < node.subnodes.length; ++i) {
-        drawNode(node.subnodes[i], shifted, viewProjection);
+        drawNode(node.subnodes[i], shifted, view, projection);
     }
 }
 
@@ -1004,14 +1032,12 @@ function init() {
         
         let view = glMatrix.mat4.invert(glMatrix.mat4.create(), state.camera.model);
 
-        let viewProjection = glMatrix.mat4.mul(glMatrix.mat4.create(), state.camera.projection, view);
-
 
         gl.clearColor(0.23, 0.23, 0.23, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 
-        drawNode(state.base, glMatrix.mat4.create(), viewProjection);
+        drawNode(state.base, glMatrix.mat4.create(), view, state.camera.projection);
 
         requestAnimationFrame(loop)
     }
