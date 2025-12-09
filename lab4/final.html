@@ -300,8 +300,6 @@ function PrintObj(vertices, indices, normals) {
 class Torus extends Mesh {
     constructor(tubeRadius, radius, circleCount, verticesPerCircle) {
         
-        let r = radius + tubeRadius;
-        let tr = tubeRadius;
         
         let vertices = []
         let indices = []
@@ -314,29 +312,20 @@ class Torus extends Mesh {
             let prevring = i * verticesPerCircle;
             let nextring = verticesPerCircle * ((i + 1) % circleCount);
 
-
-            let x = r*Math.cos(parallel);
-            let y = 0;
-            let z = r*Math.sin(parallel);
-
-
-            let circleCenter = glMatrix.vec3.fromValues(x, y, z);
-
             for (let j = 0; j < verticesPerCircle; ++j) {
                 let meridian = 2*Math.PI*j / verticesPerCircle;
 
-                let circleRot = glMatrix.vec3.fromValues(tr*Math.cos(meridian), tr*Math.sin(meridian), 0);
-                
-                let tubeRot = glMatrix.vec3.rotateZ(glMatrix.vec3.create(), circleRot, [0, 0, 0], parallel);
-                
-                let pos = glMatrix.vec3.add(glMatrix.vec3.create(), tubeRot, circleCenter);
 
-                vertices.push(pos[0], pos[1], pos[2]);
+                let x = (radius + tubeRadius * Math.cos(meridian)) * Math.cos(parallel);
+                let y = tubeRadius * Math.sin(meridian);
+                let z = (radius + tubeRadius * Math.cos(meridian)) * Math.sin(parallel);
+                vertices.push(x, y, z);
+
 
                 let nextj = (j + 1) % verticesPerCircle;
 
-                indices.push(prevring + nextj, prevring + j, nextring + j);
-                indices.push(nextring + j, nextring + nextj, prevring + nextj);
+                indices.push(nextring + j, prevring + j, prevring + nextj);
+                indices.push(prevring + nextj, nextring + nextj, nextring + j);
             }
         }
         let normals = calculateNormals(vertices, indices);
@@ -804,7 +793,7 @@ function init() {
     // let torsomesh = new Cuboid(1, 1, 1);
 
     let cubemesh = new Cuboid(1, 1, 1);
-    let torusmesh = new Torus(0.5, 0.5, 100, 100);
+    let torusmesh = new Torus(0.5, 1.0, 100, 100);
     let spheremesh = new Sphere(100, 100);
     let cylindermesh = new Cylinder(0.5, 5, 50, 50);
     let conemesh = new Cone(10);
