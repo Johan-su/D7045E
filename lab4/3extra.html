@@ -26,33 +26,40 @@ let gl;  // The WebGL graphics context.
 
 
 class Mesh {
-    constructor(vertices, indices) {
-        this.vertices = vertices
-        this.indices = indices
+    constructor(vertices, indices, normals) {
+        this.vertices = vertices;
+        this.indices = indices;
+        this.normals = normals;
 
-        this.vao = gl.createVertexArray()
-        gl.bindVertexArray(this.vao)
+        this.vao = gl.createVertexArray();
+        gl.bindVertexArray(this.vao);
 
-        this.vbo = gl.createBuffer()
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo)
-        gl.bufferData(gl.ARRAY_BUFFER, this.vertices, gl.STREAM_DRAW)
-        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
-        gl.enableVertexAttribArray(0)
+        this.vbo1 = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo1);
+        gl.bufferData(gl.ARRAY_BUFFER, this.vertices, gl.STREAM_DRAW);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(0);
 
-        this.ibo = gl.createBuffer()
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo)
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices, gl.STREAM_DRAW)
+        this.vbo2 = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo2);
+        gl.bufferData(gl.ARRAY_BUFFER, this.normals, gl.STREAM_DRAW);
+        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(1);
 
-        gl.bindVertexArray(null)
-        gl.bindBuffer(gl.ARRAY_BUFFER, null)
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null)
+        this.ibo = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices, gl.STREAM_DRAW);
+
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
     }
 }
 
-class Cuboid extends Mesh {
+class BasicCuboid extends Mesh {
     constructor(width, depth, height) {
 
-        let vertices = new Float32Array([
+        let vertices = [
             -width/2, -height/2, depth/2,
             width/2, -height/2, depth/2,
             width/2, height/2, depth/2,
@@ -62,8 +69,10 @@ class Cuboid extends Mesh {
             width/2, -height/2, -depth/2,
             width/2, height/2, -depth/2,
             -width/2, height/2, -depth/2,
-        ])
-        let indices = new Uint32Array([
+        ];
+
+
+        let indices = [
             // front
             0, 1, 2,
             2, 3, 0,
@@ -87,12 +96,132 @@ class Cuboid extends Mesh {
             // back
             5, 6, 7,
             7, 4, 5,
-        ])
+        ];
 
-        super(vertices, indices)
+        super(new Float32Array(vertices), new Uint32Array(indices));
     }
 }
 
+function calculateNormals(vertices, indices) {
+    
+    let vecNormals = [];
+    for (let i = 0; i < vertices.length/3; ++i) {
+        vecNormals.push(glMatrix.vec3.create());
+    }
+
+    let di = 3;
+    for (let i = 0; i < indices.length; i += di) {
+        
+        let i0 = indices[i];
+        let i1 = indices[i+1];
+        let i2 = indices[i+2];
+
+
+        let v0 = glMatrix.vec3.fromValues(vertices[di*i0], vertices[di*i0+1], vertices[di*i0+2]);
+        let v1 = glMatrix.vec3.fromValues(vertices[di*i1], vertices[di*i1+1], vertices[di*i1+2]);
+        let v2 = glMatrix.vec3.fromValues(vertices[di*i2], vertices[di*i2+1], vertices[di*i2+2]);
+
+
+        let v1v0sub = glMatrix.vec3.sub(glMatrix.vec3.create(), v1, v0);
+        let v2v0sub = glMatrix.vec3.sub(glMatrix.vec3.create(), v2, v0);
+
+
+        let cross = glMatrix.vec3.cross(glMatrix.vec3.create(), v1v0sub, v2v0sub);
+        let normal = glMatrix.vec3.normalize(glMatrix.vec3.create(), cross);
+        // let normal = cross;
+
+        glMatrix.vec3.add(vecNormals[i0], vecNormals[i0], normal);
+        glMatrix.vec3.add(vecNormals[i1], vecNormals[i1], normal);
+        glMatrix.vec3.add(vecNormals[i2], vecNormals[i2], normal);
+    }
+
+    let normals = [];
+
+    for (let i = 0; i < vecNormals.length; ++i) {
+        glMatrix.vec3.normalize(vecNormals[i], vecNormals[i]);
+
+        let v = vecNormals[i];
+
+        normals.push(v[0], v[1], v[2]);
+    }
+
+
+
+
+    return normals;
+}
+
+class Cuboid extends Mesh {
+    constructor(width, depth, height) {
+
+        let vertices = [
+            -width/2, -height/2, depth/2,
+            width/2, -height/2, depth/2,
+            width/2, height/2, depth/2,
+            -width/2, height/2, depth/2,
+
+
+            width/2, -height/2, depth/2,
+            width/2, -height/2, -depth/2,
+            width/2, height/2, -depth/2,
+            width/2, height/2, depth/2,
+
+
+            width/2, -height/2, -depth/2,
+            -width/2, -height/2, -depth/2,
+            -width/2, height/2, -depth/2,
+            width/2, height/2, -depth/2,
+
+
+            -width/2, -height/2, -depth/2,
+            -width/2, -height/2, depth/2,
+            -width/2, height/2, depth/2,
+            -width/2, height/2, -depth/2,
+
+
+            -width/2, height/2, depth/2,
+            width/2, height/2, depth/2,
+            width/2, height/2, -depth/2,
+            -width/2, height/2, -depth/2,
+
+
+            width/2, -height/2, depth/2,
+            -width/2, -height/2, depth/2, 
+            -width/2, -height/2, -depth/2,
+            width/2, -height/2, -depth/2,
+        ];
+
+        let indices = [
+            // front
+            0, 1, 2,
+            2, 3, 0,
+
+            // right
+            4, 5, 6,
+            6, 7, 4,
+
+            // behind
+            8, 9, 10,
+            10, 11, 8,
+
+            // left
+            12, 13, 14,
+            14, 15, 12,
+
+            // top
+            16, 17, 18,
+            18, 19, 16,
+
+            // bot
+            20, 21, 22,
+            22, 23, 20
+        ];
+
+        let normals = calculateNormals(vertices, indices);
+
+        super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
+    }
+}
 
 // https://medium.com/@oscarsc/four-ways-to-create-a-mesh-for-a-sphere-d7956b825db4
 class Sphere extends Mesh {
@@ -117,8 +246,6 @@ class Sphere extends Mesh {
             let botring = i*meridianCount;
             let topring = (i - 1)*(meridianCount);
 
-
-
             for (let j = 0; j < meridianCount; ++j) {
                 let meridian = 2 * Math.PI * j / meridianCount;
 
@@ -130,44 +257,54 @@ class Sphere extends Mesh {
                 let nextj = (j + 1) % meridianCount;
 
                 if (i == 0) {
-                    indices.push(northvertexindex, botring + j, botring + nextj)
+                    indices.push(botring + nextj, botring + j, northvertexindex);
+                    // indices.push(northvertexindex, botring + j, botring + nextj)
                 
                 } else {
                     if (i == parallelCount - 1) {
                         indices.push(southvertexindex, botring + j, botring + nextj)
                     }
-                    indices.push(botring + j, botring + nextj, topring + nextj)
-                    indices.push(topring + nextj, topring + j, botring + j)
+                    indices.push(botring + nextj, botring + j, topring + j);
+                    indices.push(topring + j, topring + nextj, botring + nextj);
+
+                    // indices.push(botring + j, botring + nextj, topring + nextj);
+                    // indices.push(topring + nextj, topring + j, botring + j);
                 }
             }
         }
 
         vertices.push(0, r, 0, 0, -r, 0)
 
-        super(new Float32Array(vertices), new Uint32Array(indices))  
+        let normals = calculateNormals(vertices, indices);
+
+
+        super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
 
-function PrintObj(vertices, indices) {
+function PrintObj(vertices, indices, normals) {
     let s = ""
 
     for (let i = 0; i < vertices.length; i += 3) {
         s = s+`v ${vertices[i]} ${vertices[i+1]} ${vertices[i+2]}\n`;
     }
-    for (let i = 0; i < indices.length; i += 3) {
-        s = s+`f ${indices[i]+1} ${indices[i+1]+1} ${indices[i+2]+1}\n`;
+    for (let i = 0; i < normals.length; i += 3) {
+        s = s+`vn ${normals[i]} ${normals[i+1]} ${normals[i+2]}\n`;
     }
+    for (let i = 0; i < indices.length; i += 3) {
+        s = s+`f ${indices[i]+1}//${indices[i]+1} ${indices[i+1]+1}//${indices[i+1]+1} ${indices[i+2]+1}//${indices[i+2]+1}\n`;
+    }
+    
     console.log(s)
 }
 
 class Torus extends Mesh {
     constructor(tubeRadius, radius, circleCount, verticesPerCircle) {
         
-        let r = radius + tubeRadius;
-        let tr = tubeRadius;
         
         let vertices = []
         let indices = []
+        let normals = [];
 
 
         for (let i = 0; i < circleCount; ++i) {
@@ -177,33 +314,26 @@ class Torus extends Mesh {
             let prevring = i * verticesPerCircle;
             let nextring = verticesPerCircle * ((i + 1) % circleCount);
 
-
-            let x = r*Math.cos(parallel);
-            let y = 0;
-            let z = r*Math.sin(parallel);
-
-
-            let circleCenter = glMatrix.vec3.fromValues(x, y, z);
-
             for (let j = 0; j < verticesPerCircle; ++j) {
                 let meridian = 2*Math.PI*j / verticesPerCircle;
 
-                let circleRot = glMatrix.vec3.fromValues(tr*Math.cos(meridian), tr*Math.sin(meridian), 0);
-                
-                let tubeRot = glMatrix.vec3.rotateZ(glMatrix.vec3.create(), circleRot, [0, 0, 0], parallel);
-                
-                let pos = glMatrix.vec3.add(glMatrix.vec3.create(), tubeRot, circleCenter);
 
-                vertices.push(pos[0], pos[1], pos[2]);
+                let x = (radius + tubeRadius * Math.cos(meridian)) * Math.cos(parallel);
+                let y = tubeRadius * Math.sin(meridian);
+                let z = (radius + tubeRadius * Math.cos(meridian)) * Math.sin(parallel);
+                vertices.push(x, y, z);
+                normals.push(Math.cos(meridian)*Math.cos(parallel), Math.sin(meridian), Math.cos(meridian)*Math.sin(parallel));
+
 
                 let nextj = (j + 1) % verticesPerCircle;
 
-                indices.push(prevring + nextj, prevring + j, nextring + j);
-                indices.push(nextring + j, nextring + nextj, prevring + nextj);
+                indices.push(nextring + j, prevring + j, prevring + nextj);
+                indices.push(prevring + nextj, nextring + nextj, nextring + j);
             }
         }
-
-        super(new Float32Array(vertices), new Uint32Array(indices))  
+        // normals = calculateNormals(vertices, indices);
+        // PrintObj(vertices, indices, normals);
+        super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
 
@@ -213,8 +343,9 @@ class Cylinder extends Mesh {
         
         let r = radius;
         
-        let vertices = []
-        let indices = []
+        let vertices = [];
+        let indices = [];
+        let normals = [];
 
 
         for (let i = 0; i < parallelCount; ++i) {
@@ -234,7 +365,7 @@ class Cylinder extends Mesh {
                 let z = r*Math.sin(meridian);
 
                 vertices.push(x, y, z)
-
+                normals.push(Math.cos(meridian), 0, Math.sin(meridian));
                 let nextj = (j + 1) % meridianCount;
 
                 if (i != 0) {
@@ -243,8 +374,8 @@ class Cylinder extends Mesh {
                 }
             }
         }
-
-        super(new Float32Array(vertices), new Uint32Array(indices))  
+        // normals = calculateNormals(vertices, indices);
+        super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
 
@@ -262,7 +393,7 @@ class Cone extends Mesh {
 
         for (let i = 0; i < meridianCount; ++i) {
 
-            let meridian = 2*Math.PI*i / (meridianCount + 1); 
+            let meridian = 2*Math.PI*i / meridianCount; 
 
             let x = r*Math.cos(meridian);
             let z = r*Math.sin(meridian);
@@ -270,13 +401,13 @@ class Cone extends Mesh {
             vertices.push(x, y, z);
 
             let nexti = (i + 1) % meridianCount
-            indices.push(topvertexindex, i, nexti);
+            indices.push(nexti, i, topvertexindex);
         }
 
 
         vertices.push(0, r, 0)
-
-        super(new Float32Array(vertices), new Uint32Array(indices))  
+        let normals = calculateNormals(vertices, indices);
+        super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
 
@@ -300,8 +431,8 @@ class Star extends Mesh {
             vertices.push(outerDist*Math.cos(outerangle), outerDist*Math.sin(outerangle), 0);
             vertices.push(innerDist*Math.cos(innerangle), innerDist*Math.sin(innerangle), 0);
 
-            indices.push(centerFrontIndex, 2*i, 2*i+1);
-            indices.push(centerFrontIndex, 2*i+1, (2*i+2) % (2*spikeCount));
+            indices.push(2*i+1, 2*i, centerFrontIndex);
+            indices.push((2*i+2) % (2*spikeCount), 2*i+1, centerFrontIndex);
 
             indices.push(centerBackIndex, 2*i, 2*i+1);
             indices.push(centerBackIndex, 2*i+1, (2*i+2) % (2*spikeCount));
@@ -309,8 +440,8 @@ class Star extends Mesh {
         
         
         vertices.push(0, 0, -T / 2, 0, 0, T / 2);
-
-        super(new Float32Array(vertices), new Uint32Array(indices))  
+        let normals = calculateNormals(vertices, indices);
+        super(new Float32Array(vertices), new Uint32Array(indices), new Float32Array(normals));
     }
 }
 
@@ -527,7 +658,7 @@ function init() {
     let purplemat = new MonochromeMaterial(purple);
 
     let cubemesh = new Cuboid(1, 1, 1);
-    let torusmesh = new Torus(0.5, 0.5, 100, 100);
+    let torusmesh = new Torus(0.5, 0.8, 100, 100);
     let spheremesh = new Sphere(10, 10);
     let cylindermesh = new Cylinder(0.5, 0.5, 10, 10);
     let conemesh = new Cone(10);
