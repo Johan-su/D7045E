@@ -128,6 +128,7 @@ function calculateNormals(vertices, indices) {
 
         let cross = glMatrix.vec3.cross(glMatrix.vec3.create(), v1v0sub, v2v0sub);
         let normal = glMatrix.vec3.normalize(glMatrix.vec3.create(), cross);
+        // let normal = cross;
 
         glMatrix.vec3.add(vecNormals[i0], vecNormals[i0], normal);
         glMatrix.vec3.add(vecNormals[i1], vecNormals[i1], normal);
@@ -458,7 +459,7 @@ const monovert =`#version 300 es
     layout(location = 0) in vec4 a_coords;
     layout(location = 1) in vec3 a_normals;
     
-    uniform mat4 u_normalMatrix;
+    uniform mat3 u_normalMatrix;
     uniform mat4 u_MV;
     uniform mat4 u_MVP;
 
@@ -468,7 +469,8 @@ const monovert =`#version 300 es
     void main() {
         gl_Position = u_MVP * a_coords;
         v_fragPos = (u_MV * a_coords).xyz;
-        v_normal = (u_normalMatrix * vec4(normalize(a_normals), 0.0)).xyz;
+        v_normal = u_normalMatrix * normalize(a_normals);
+        // v_normal = normalize(a_normals);
     }`;
 
 const monofrag =`#version 300 es
@@ -487,12 +489,14 @@ const monofrag =`#version 300 es
     
     void main() {
         
+        float intensity = 2.0;
         vec3 ambient = vec3(0.1);
 
         vec3 normal = normalize(v_normal);
 
         vec3 diff = u_lightPosition - v_fragPos;
 
+        float distance = sqrt(dot(diff, diff));
 
         vec3 L = normalize(diff);
         vec3 V = normalize(-v_fragPos);
@@ -505,7 +509,7 @@ const monofrag =`#version 300 es
         float specularStrength = pow(max(dot(R, V), 0.0), 32.0);
         vec3 specular = 0.4 * specularStrength * u_lightColor; 
 
-        vec3 lighting = ambient + diffuse + specular;
+        vec3 lighting = ambient + (diffuse + specular) * max(0.0, (intensity - distance));
         o_color = vec4(lighting * u_color.xyz, 1);
     }`;
 
@@ -555,16 +559,15 @@ class GraphicsNode extends BaseNode {
         this.material = material
     }
 
-    draw(mvp, normalMatrix, mv, lightpos, lightcolor) {
+    draw(mvp, normalMatrix, mv, eyelightpos, lightcolor) {
         gl.bindVertexArray(this.mesh.vao);
         this.material.ApplyMaterial();
 
-        let eyelightpos = glMatrix.vec3.transformMat4(glMatrix.vec3.create(), lightpos, mv);
 
         gl.uniform3f(gl.getUniformLocation(this.material.shaderProg.get(), "u_lightColor"), lightcolor[0], lightcolor[1], lightcolor[2]);
         gl.uniform3f(gl.getUniformLocation(this.material.shaderProg.get(), "u_lightPosition"), eyelightpos[0], eyelightpos[1], eyelightpos[2]);
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MV"), false, mv);        
-        gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_normalMatrix"), false, normalMatrix);        
+        gl.uniformMatrix3fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_normalMatrix"), false, normalMatrix);        
         gl.uniformMatrix4fv(gl.getUniformLocation(this.material.shaderProg.get(), "u_MVP"), false, mvp);
         gl.drawElements(gl.TRIANGLES, this.mesh.indices.length, gl.UNSIGNED_INT, 0);
     }
@@ -674,7 +677,9 @@ function getRandomInt(minval, maxval) {
     return Math.round(getRandom(minval, maxval));
 }
 
-function drawNode(node, parentTransform, view, projection) {
+function drawNode(node, parentTransform, view, projection, eyelightpos, lightcolor) {
+
+
 
     let radtodeg = 180 / Math.PI;
 
@@ -691,23 +696,14 @@ function drawNode(node, parentTransform, view, projection) {
 
     let mv = glMatrix.mat4.mul(glMatrix.mat4.create(), view, shifted);
     
-    let normalMatrix = glMatrix.mat4.clone(mv);
-    normalMatrix[12] = 0;
-    normalMatrix[13] = 0;
-    normalMatrix[14] = 0;
-    glMatrix.mat4.invert(normalMatrix, normalMatrix);
-    glMatrix.mat4.transpose(normalMatrix, normalMatrix);
+    let normalMatrix = glMatrix.mat3.normalFromMat4(glMatrix.mat3.create(), mv);
 
     let mvp = glMatrix.mat4.mul(glMatrix.mat4.create(), projection, mv);
 
-    let lightpos = [4, 3, 4];
-
-    let lightcolor = [1, 1, 1];
-
-    node.draw(mvp, normalMatrix, mv, lightpos, lightcolor);
+    node.draw(mvp, normalMatrix, mv, eyelightpos, lightcolor);
 
     for (let i = 0; i < node.subnodes.length; ++i) {
-        drawNode(node.subnodes[i], shifted, view, projection);
+        drawNode(node.subnodes[i], shifted, view, projection, eyelightpos, lightcolor);
     }
 }
 
@@ -811,7 +807,7 @@ function init() {
     state.camera = new Camera(matFromComponents(1, [4, 4, 12], 0), glMatrix.mat4.create(), 5, Math.PI/60);
     // glMatrix.mat4.ortho(state.camera.projection, -100, 100, -100, 100, 100, -100)
 
-    glMatrix.mat4.perspective(state.camera.projection, Math.PI/2.1, canvas.width/canvas.height, 0.1, -100)
+    glMatrix.mat4.perspective(state.camera.projection, Math.PI/2.1, canvas.width/canvas.height, 0.1, 100)
 
 
     let yellowmat = new MonochromeMaterial(yellow);
@@ -1016,6 +1012,11 @@ function init() {
         glMatrix.vec3.scaleAndAdd(state.camera.angleVelocity, state.camera.angleVelocity, anglevec, angleaccel);
     });
 
+    let lightpos = [4, 3, 4];
+
+    let lightcolor = [1, 1, 1];
+
+    state.base.subnodes.push(new GraphicsNode(spheremesh, greenmat, 0.2, lightpos, 0, []))
 
 
     let prev = performance.now();
@@ -1060,7 +1061,11 @@ function init() {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 
-        drawNode(state.base, glMatrix.mat4.create(), view, state.camera.projection);
+        let eyelightpos = glMatrix.vec3.transformMat4(glMatrix.vec3.create(), lightpos, view);
+
+
+
+        drawNode(state.base, glMatrix.mat4.create(), view, state.camera.projection, eyelightpos, lightcolor);
 
         requestAnimationFrame(loop)
     }
